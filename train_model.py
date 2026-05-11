@@ -33,7 +33,7 @@ from utils.sentiment import analyze_sentiment, _score_title
 from utils.feature_engineering import calculate_technical_features
 
 # ─── Konfigurasi ───────────────────────────────────────────────────────────────
-TICKERS = {"ANTM": "ANTM.JK", "MDKA": "MDKA.JK", "BRMS": "BRMS.JK"}
+TICKERS = {"ANTM": "ANTM.JK", "MDKA": "MDKA.JK", "BRMS": "BRMS.JK", "PSAB": "PSAB.JK", "ACES": "ACES.JK"}
 GOLD_TICKER = "GC=F"
 PERIOD = "2y"   # Ambil 2 tahun data historis untuk training
 
@@ -47,8 +47,10 @@ FEATURE_COLS = [
     "Return", "MA7", "MA30", "Volatility",
     "Gold_Close", "Gold_Return",
     "Sentiment_Score", "News_Count",
-    "PER", "PBV", "EPS", "ROE", "DER",
-    "Current_Ratio", "Fundamental_Score",
+    "PBV_x_ROE", "Price_to_Equity_Discount", "Relative_PE_ratio", 
+    "EPS_Growth", "Debt_to_Total_Assets_Ratio", "Liquidity_Differential", 
+    "CCE", "Operating_Efficiency", "Dividend_Payout", 
+    "Yearly_Price_Change", "Composite_Rank", "Net_Debt_to_Equity"
 ]
 TARGET_COL = "Target_Return"
 
@@ -57,6 +59,8 @@ KEYWORDS_MAP = {
     "ANTM": ["ANTM saham", "Antam emas"],
     "MDKA": ["MDKA saham", "Merdeka Copper Gold saham"],
     "BRMS": ["BRMS saham", "Bumi Resources Minerals saham"],
+    "PSAB": ["PSAB saham", "J Resources Asia Pasifik saham"],
+    "ACES": ["ACES saham", "Ace Hardware saham", "ACES retail"]
 }
 
 
@@ -208,7 +212,7 @@ def main():
             continue
 
         fund_dict = fund_row.iloc[0].to_dict()
-        for col in ["PER", "PBV", "EPS", "ROE", "DER", "Current_Ratio", "Fundamental_Score"]:
+        for col in ["PBV_x_ROE", "Price_to_Equity_Discount", "Relative_PE_ratio", "EPS_Growth", "Debt_to_Total_Assets_Ratio", "Liquidity_Differential", "CCE", "Operating_Efficiency", "Dividend_Payout", "Yearly_Price_Change", "Composite_Rank", "Net_Debt_to_Equity"]:
             df[col] = pd.to_numeric(fund_dict.get(col, 0), errors="coerce")
 
         # Target: return hari berikutnya (future return)

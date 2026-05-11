@@ -84,8 +84,7 @@ def build_feature_row(stock_df: pd.DataFrame, gold_df: pd.DataFrame,
     last["News_Count"] = sentiment.get("News_Count", 0)
 
     # Gabungkan dengan fitur fundamental
-    fundamental_cols = ["PER", "PBV", "EPS", "ROE", "DER",
-                        "Current_Ratio", "Fundamental_Score"]
+    fundamental_cols = ["PBV_x_ROE", "Price_to_Equity_Discount", "Relative_PE_ratio", "EPS_Growth", "Debt_to_Total_Assets_Ratio", "Liquidity_Differential", "CCE", "Operating_Efficiency", "Dividend_Payout", "Yearly_Price_Change", "Composite_Rank", "Net_Debt_to_Equity"]
     for col in fundamental_cols:
         last[col] = fundamental.get(col, 0.0)
 
@@ -95,8 +94,10 @@ def build_feature_row(stock_df: pd.DataFrame, gold_df: pd.DataFrame,
         "Return", "MA7", "MA30", "Volatility",
         "Gold_Close", "Gold_Return",
         "Sentiment_Score", "News_Count",
-        "PER", "PBV", "EPS", "ROE", "DER",
-        "Current_Ratio", "Fundamental_Score",
+        "PBV_x_ROE", "Price_to_Equity_Discount", "Relative_PE_ratio", 
+        "EPS_Growth", "Debt_to_Total_Assets_Ratio", "Liquidity_Differential", 
+        "CCE", "Operating_Efficiency", "Dividend_Payout", 
+        "Yearly_Price_Change", "Composite_Rank", "Net_Debt_to_Equity"
     ]
 
     feature_row = pd.DataFrame([last[FEATURE_COLS].values], columns=FEATURE_COLS)

@@ -405,19 +405,25 @@ st.markdown(
 TICKER_MAP = {
     "ANTM": "ANTM.JK",
     "MDKA": "MDKA.JK",
-    "BRMS": "BRMS.JK"
+    "BRMS": "BRMS.JK",
+    "PSAB": "PSAB.JK",
+    "ACES": "ACES.JK"
 }
 
 COMPANY_NAMES = {
     "ANTM": "PT Aneka Tambang Tbk",
     "MDKA": "PT Merdeka Copper Gold Tbk",
-    "BRMS": "PT Bumi Resources Minerals Tbk"
+    "BRMS": "PT Bumi Resources Minerals Tbk",
+    "PSAB": "PT J Resources Asia Pasifik Tbk",
+    "ACES": "PT Ace Hardware Indonesia Tbk"
 }
 
 NEWS_KEYWORDS = {
     "ANTM": ["ANTM saham", "Antam emas", "Aneka Tambang saham", "ANTM emas"],
     "MDKA": ["MDKA saham", "Merdeka Copper Gold saham", "MDKA emas"],
-    "BRMS": ["BRMS saham", "Bumi Resources Minerals saham", "BRMS emas"]
+    "BRMS": ["BRMS saham", "Bumi Resources Minerals saham", "BRMS emas"],
+    "PSAB": ["PSAB saham", "J Resources Asia Pasifik saham", "PSAB emas", "J Resources gold", "J Resources tambang emas"],
+    "ACES": ["ACES saham", "Ace Hardware saham", "ACES retail"]
 }
 
 MODEL_FEATURES = [
@@ -425,9 +431,39 @@ MODEL_FEATURES = [
     "Return", "MA7", "MA30", "Volatility",
     "Gold_Close", "Gold_Return",
     "Sentiment_Score", "News_Count",
-    "PER", "PBV", "EPS", "ROE", "DER",
-    "Current_Ratio", "Fundamental_Score"
+    "PBV_x_ROE", "Price_to_Equity_Discount", "Relative_PE_ratio", 
+    "EPS_Growth", "Debt_to_Total_Assets_Ratio", "Liquidity_Differential", 
+    "CCE", "Operating_Efficiency", "Dividend_Payout", 
+    "Yearly_Price_Change", "Composite_Rank", "Net_Debt_to_Equity"
 ]
+
+MARKET_NEWS_CATEGORIES = {
+    "Semua Berita": [], # will be populated dynamically or handles all
+    "Emas": ["harga emas hari ini", "emas dunia", "emas antam", "harga emas naik", "harga emas turun", "gold price today"],
+    "Saham & IHSG": ["IHSG hari ini", "saham Indonesia", "pasar modal Indonesia", "Bursa Efek Indonesia", "rekomendasi saham hari ini"],
+    "Ekonomi Indonesia": ["ekonomi Indonesia", "inflasi Indonesia", "suku bunga Bank Indonesia", "rupiah hari ini", "pertumbuhan ekonomi Indonesia"],
+    "Ekonomi Global": ["ekonomi global", "The Fed suku bunga", "inflasi Amerika", "resesi global", "geopolitical risk market"],
+    "Komoditas": ["harga komoditas", "harga minyak dunia", "harga batu bara", "harga tembaga", "commodity market"],
+    "Tren Pasar": ["saham ramai dibahas", "market trend today", "investor sentiment", "fear of missing out saham", "berita ekonomi viral"]
+}
+
+MARKET_POSITIVE_WORDS = [
+    "naik", "menguat", "positif", "tumbuh", "meningkat", "optimis", "rebound", 
+    "bullish", "stabil", "surplus", "rekor", "cuan", "laba", "akumulasi", "prospek"
+]
+
+MARKET_NEGATIVE_WORDS = [
+    "turun", "melemah", "negatif", "anjlok", "koreksi", "tertekan", "inflasi", 
+    "resesi", "krisis", "rugi", "bearish", "risiko", "ketidakpastian", "perang", 
+    "konflik", "gagal", "defisit"
+]
+
+STOPWORDS_ID = {
+    "dan", "yang", "di", "ke", "dari", "untuk", "dengan", "dalam", "hari", 
+    "ini", "terbaru", "adalah", "pada", "karena", "sebagai", "itu", "akan", 
+    "bisa", "ada", "tidak", "juga", "sudah", "saja", "lagi", "atau", "oleh",
+    "untuk", "kita", "kami", "saya", "kamu", "mereka", "dia", "saat", "bagi"
+}
 
 
 # ======================================================
@@ -491,20 +527,20 @@ def load_fundamental_data():
 
     # Fallback agar app tetap jalan kalau file belum dimasukkan
     fallback = pd.DataFrame({
-        "Ticker": ["ANTM", "BRMS", "MDKA"],
-        "PER": [14.5, 24.1, -12.4],
-        "PBV": [1.8, 4.5, 8.2],
-        "EPS": [120.5, 5.2, -30.2],
-        "ROE": [0.14, 0.08, -0.05],
-        "DER": [0.6, 1.3, 3.1],
-        "Current_Ratio": [2.1, 1.4, 0.8],
-        "Market_Cap": [50000000000000, 25000000000000, 40000000000000],
-        "Fundamental_Score": [0.9167, 0.6667, 0.0833],
-        "Fundamental_Label": [
-            "Undervalued / Good Fundamental",
-            "Fair Value",
-            "Overvalued / Weak Fundamental"
-        ]
+        "Ticker": ["ANTM", "BRMS", "MDKA", "PSAB", "ACES"],
+        "PBV_x_ROE": [2999.45, 58.12, -417.98, 188.96, 390.46],
+        "Close_Price": [3640, 735, 3260, 510, 364],
+        "Price_to_Equity_Discount": [120.36, 1263.56, 0.0, 268.89, 92.22],
+        "Relative_PE_ratio": [0.07, 0.01, 0.0, 0.04, 0.08],
+        "EPS_Growth": [0.0, 0.0, 0.0, 0.13, 0.0],
+        "Debt_to_Total_Assets_Ratio": [0.03, 0.14, 0.32, 0.11, 0.01],
+        "Liquidity_Differential": [1.51, 1.08, 1.87, 1.39, 2.1],
+        "CCE": [0.06, 0.26, 0.14, 0.57, 0.19],
+        "Operating_Efficiency": [0.19, 0.63, 0.71, 0.54, 0.22],
+        "Dividend_Payout": [0.0, 0.0, 0.0, 0.0, 0.0],
+        "Yearly_Price_Change": [0.0, 0.0, 0.0, 0.0, 0.0],
+        "Composite_Rank": [0.6, 0.2, 0.26, 0.34, 0.65],
+        "Net_Debt_to_Equity": [0.2, 0.11, 1.79, 0.12, 0.34]
     })
 
     return fallback
@@ -521,7 +557,7 @@ def fetch_stock_data(ticker_code, period="2y"):
     )
 
     if data.empty:
-        raise ValueError("Data harga saham tidak tersedia.")
+        raise ValueError("Data harga saham terbaru gagal diambil. Silakan coba beberapa saat lagi.")
 
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = data.columns.get_level_values(0)
@@ -665,6 +701,156 @@ def apply_sentiment(news_df):
 
 
 # ======================================================
+# MARKET NEWS & TRENDS LOGIC
+# ======================================================
+
+@st.cache_data(ttl=1800)
+def fetch_market_news(category="Semua Berita"):
+    news_items = []
+    
+    if category == "Semua Berita":
+        keywords = []
+        for kw_list in MARKET_NEWS_CATEGORIES.values():
+            keywords.extend(kw_list)
+    else:
+        keywords = MARKET_NEWS_CATEGORIES.get(category, [])
+        
+    for keyword in keywords:
+        query = quote(keyword)
+        url = f"https://news.google.com/rss/search?q={query}&hl=id&gl=ID&ceid=ID:id"
+        feed = feedparser.parse(url)
+        
+        limit_per_kw = 5 if category == "Semua Berita" else 15 
+        for entry in feed.entries[:limit_per_kw]:
+            news_items.append({
+                "Keyword": keyword,
+                "Category": category if category != "Semua Berita" else next((k for k, v in MARKET_NEWS_CATEGORIES.items() if keyword in v), "Umum"),
+                "Title": entry.title if "title" in entry else "",
+                "Published": entry.published if "published" in entry else None,
+                "Source": entry.source.title if "source" in entry else "Google News",
+                "Link": entry.link if "link" in entry else ""
+            })
+            
+    news_df = pd.DataFrame(news_items)
+    if news_df.empty:
+        return pd.DataFrame(columns=["Date", "Category", "Title", "Source", "Link"])
+        
+    news_df["Published"] = pd.to_datetime(news_df["Published"], errors="coerce")
+    news_df["Date"] = news_df["Published"].dt.date
+    news_df["Date"] = pd.to_datetime(news_df["Date"], errors="coerce")
+    news_df = news_df.dropna(subset=["Title"]).drop_duplicates(subset=["Title"])
+    news_df = news_df[["Date", "Category", "Title", "Source", "Link"]]
+    news_df = news_df.sort_values("Date", ascending=False).reset_index(drop=True)
+    
+    return news_df.head(50)
+
+def apply_market_sentiment(news_df):
+    if news_df.empty:
+        return news_df, 0, "Neutral Market"
+
+    def score_market(text):
+        text = str(text).lower()
+        pos_count = sum(1 for word in MARKET_POSITIVE_WORDS if word in text)
+        neg_count = sum(1 for word in MARKET_NEGATIVE_WORDS if word in text)
+        
+        raw_score = pos_count - neg_count
+        if raw_score > 0:
+            return "Positive", min(raw_score / 3, 1)
+        elif raw_score < 0:
+            return "Negative", max(raw_score / 3, -1)
+        return "Neutral", 0
+
+    sentiment_result = news_df["Title"].apply(score_market)
+    news_df["Sentiment_Label"] = sentiment_result.apply(lambda x: x[0])
+    news_df["Sentiment_Score"] = sentiment_result.apply(lambda x: x[1])
+
+    avg_score = news_df["Sentiment_Score"].mean()
+    if avg_score > 0.05:
+        label = "Positive Market"
+    elif avg_score < -0.05:
+        label = "Negative Market"
+    else:
+        label = "Neutral Market"
+
+    return news_df, avg_score, label
+
+def get_trending_topics(news_df):
+    if news_df.empty:
+        return []
+        
+    import re
+    from collections import Counter
+    
+    all_titles = " ".join(news_df["Title"].tolist()).lower()
+    all_titles = re.sub(r'[^\w\s]', '', all_titles)
+    words = all_titles.split()
+    
+    filtered_words = [w for w in words if w not in STOPWORDS_ID and len(w) > 2]
+    word_counts = Counter(filtered_words)
+    return [word for word, count in word_counts.most_common(10)]
+
+def create_market_sentiment_chart(news_df):
+    if news_df.empty or "Sentiment_Label" not in news_df.columns:
+        return None
+        
+    sentiment_counts = news_df["Sentiment_Label"].value_counts().reset_index()
+    sentiment_counts.columns = ["Sentiment", "Count"]
+    
+    colors = {'Positive': '#4ade80', 'Neutral': '#94a3b8', 'Negative': '#f87171'}
+    
+    fig = go.Figure(data=[go.Pie(
+        labels=sentiment_counts["Sentiment"],
+        values=sentiment_counts["Count"],
+        hole=0.6,
+        marker=dict(colors=[colors.get(l, '#94a3b8') for l in sentiment_counts["Sentiment"]])
+    )])
+    
+    fig.update_layout(
+        template="plotly_dark",
+        height=300,
+        margin=dict(l=10, r=10, t=30, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#e2e8f0"),
+        title="Distribusi Sentimen Market",
+        showlegend=False
+    )
+    return fig
+
+def create_category_bar_chart(news_df):
+    if news_df.empty:
+        return None
+        
+    cat_counts = news_df["Category"].value_counts().reset_index()
+    cat_counts.columns = ["Category", "Count"]
+    
+    fig = go.Figure(go.Bar(
+        x=cat_counts["Count"],
+        y=cat_counts["Category"],
+        orientation='h',
+        marker_color="#d4af37"
+    ))
+    
+    fig.update_layout(
+        template="plotly_dark",
+        height=300,
+        margin=dict(l=10, r=10, t=30, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#e2e8f0"),
+        title="Jumlah Berita per Kategori",
+        yaxis={'categoryorder':'total ascending'}
+    )
+    return fig
+
+def generate_market_insight(sentiment_label, avg_score, top_category):
+    if sentiment_label == "Positive Market":
+        return "Sentimen pasar saat ini cenderung positif karena mayoritas berita terbaru menunjukkan tren penguatan, prospek pasar, atau kondisi ekonomi yang stabil. Namun, investor tetap perlu memperhatikan risiko volatilitas dan perubahan sentimen global yang bisa terjadi kapan saja."
+    elif sentiment_label == "Negative Market":
+        return "Sentimen pasar saat ini cenderung negatif karena banyak berita terkait pelemahan harga, tekanan ekonomi, risiko global, atau ketidakpastian pasar. Investor disarankan lebih berhati-hati sebelum mengambil keputusan besar."
+    else:
+        return "Sentimen pasar saat ini cenderung netral. Berita yang muncul masih sangat beragam antara sentimen positif dan negatif, sehingga investor disarankan untuk tidak hanya mengikuti hype pasar dan tetap memantau tren yang berkembang."
+
+
+# ======================================================
 # MODEL AND RECOMMENDATION
 # ======================================================
 
@@ -695,7 +881,7 @@ def fallback_predict_return(row):
         technical_signal -= 0.006
 
     sentiment_signal = row["Sentiment_Score"] * 0.012
-    fundamental_signal = (row["Fundamental_Score"] - 0.5) * 0.025
+    fundamental_signal = (row["Composite_Rank"] - 0.5) * 0.025
     gold_signal = row["Gold_Return"] * 0.6 if not pd.isna(row["Gold_Return"]) else 0
 
     volatility_penalty = min(row["Volatility"], 0.08) * 0.15 if not pd.isna(row["Volatility"]) else 0
@@ -720,7 +906,7 @@ def prepare_latest_row(stock_df, gold_df, fundamental_row, sentiment_score, news
     latest["Sentiment_Score"] = sentiment_score
     latest["News_Count"] = news_count
 
-    for col in ["PER", "PBV", "EPS", "ROE", "DER", "Current_Ratio", "Fundamental_Score"]:
+    for col in ["PBV_x_ROE", "Price_to_Equity_Discount", "Relative_PE_ratio", "EPS_Growth", "Debt_to_Total_Assets_Ratio", "Liquidity_Differential", "CCE", "Operating_Efficiency", "Dividend_Payout", "Yearly_Price_Change", "Composite_Rank", "Net_Debt_to_Equity"]:
         latest[col] = fundamental_row[col]
 
     return latest
@@ -938,6 +1124,123 @@ st.write("")
 
 
 # ======================================================
+# MARKET NEWS & TRENDS UI
+# ======================================================
+
+st.markdown('<div class="section-title">🌍 Market News & Trends</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="section-caption">Pantau berita emas, ekonomi, IHSG, komoditas, dan tren pasar terbaru dalam satu tempat.</div>',
+    unsafe_allow_html=True
+)
+
+mn_col1, mn_col2 = st.columns([1, 1])
+
+with mn_col1:
+    market_category = st.selectbox(
+        "Kategori Berita",
+        options=list(MARKET_NEWS_CATEGORIES.keys()),
+        index=0
+    )
+
+with mn_col2:
+    market_search = st.text_input("Cari berita (misalnya: inflasi, IHSG, The Fed)", "")
+
+with st.spinner("Mengambil berita pasar terbaru..."):
+    # Fetch and process market news
+    raw_market_news_df = fetch_market_news(market_category)
+    
+    # Filter by search
+    if market_search:
+        market_news_df = raw_market_news_df[raw_market_news_df['Title'].str.contains(market_search, case=False, na=False)].copy()
+    else:
+        market_news_df = raw_market_news_df.copy()
+        
+    market_news_df, market_avg_score, market_label = apply_market_sentiment(market_news_df)
+    trending_topics = get_trending_topics(market_news_df)
+    market_insight = generate_market_insight(market_label, market_avg_score, market_category)
+
+if market_news_df.empty:
+    st.warning("Berita market terbaru belum tersedia atau tidak ditemukan. Silakan coba beberapa saat lagi atau ubah kata kunci.")
+else:
+    # Summary Cards
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        metric_card("Market Mood", market_label, f"Avg Score: {market_avg_score:.2f}")
+    with m2:
+        metric_card("Total News", str(len(market_news_df)), "Berita ditemukan")
+    with m3:
+        top_cat = market_news_df['Category'].value_counts().index[0] if not market_news_df.empty else "-"
+        metric_card("Top Category", top_cat, "Kategori Terbanyak")
+    with m4:
+        pos_count = len(market_news_df[market_news_df['Sentiment_Label'] == 'Positive'])
+        neg_count = len(market_news_df[market_news_df['Sentiment_Label'] == 'Negative'])
+        metric_card("Sentiment Spread", f"{pos_count} Pos / {neg_count} Neg", "Sebaran Berita")
+
+    st.write("")
+    
+    # Charts
+    mc1, mc2 = st.columns(2)
+    with mc1:
+        sentiment_chart = create_market_sentiment_chart(market_news_df)
+        if sentiment_chart:
+            st.plotly_chart(sentiment_chart, use_container_width=True)
+    with mc2:
+        category_chart = create_category_bar_chart(market_news_df)
+        if category_chart:
+            st.plotly_chart(category_chart, use_container_width=True)
+
+    st.write("")
+    
+    # Trending Topics & Insight
+    ti1, ti2 = st.columns([1, 1.5])
+    with ti1:
+        st.markdown(
+            f"""
+            <div class="glass-card">
+                <div class="metric-label">🔥 Trending Topics</div>
+                <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
+                    {''.join([f'<span class="mini-chip">{topic}</span>' for topic in trending_topics])}
+                </div>
+            </div>
+            """, unsafe_allow_html=True
+        )
+    with ti2:
+        st.markdown(
+            f"""
+            <div class="gold-card">
+                <div class="recommendation-title">Market Insight Explanation</div>
+                <div class="step-desc" style="color:#ffffff;">{market_insight}</div>
+            </div>
+            """, unsafe_allow_html=True
+        )
+
+    st.write("")
+    st.markdown('<div class="metric-label" style="font-size:1.1rem;">Latest Market News</div>', unsafe_allow_html=True)
+    
+    for _, row in market_news_df.head(10).iterrows():
+        date_text = row["Date"].strftime("%d %b %Y") if pd.notna(row["Date"]) else "-"
+        label = row.get("Sentiment_Label", "Neutral")
+        score = row.get("Sentiment_Score", 0)
+        
+        st.markdown(
+            f"""
+            <div class="news-card">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                    <div class="news-title" style="flex:1;">{row["Title"]}</div>
+                    <span class="badge {'badge-green' if label == 'Positive' else 'badge-red' if label == 'Negative' else 'badge-blue'}" style="margin-top:0; margin-left:10px;">{label}</span>
+                </div>
+                <div class="news-meta">{date_text} • {row["Source"]} • Kategori: {row["Category"]} ({score:.2f})</div>
+                <a class="news-link" href="{row["Link"]}" target="_blank">Baca berita →</a>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+st.write("")
+st.markdown("---")
+st.write("")
+
+# ======================================================
 # INPUT SECTION
 # ======================================================
 
@@ -952,7 +1255,7 @@ input_col1, input_col2, input_col3 = st.columns([1.2, 1.2, 1])
 with input_col1:
     selected_ticker = st.selectbox(
         "Pilih Saham",
-        options=["ANTM", "MDKA", "BRMS"],
+        options=list(TICKER_MAP.keys()),
         index=0
     )
 
@@ -1078,16 +1381,18 @@ with st.spinner("Sedang mengambil data terbaru dan menjalankan analisis..."):
         recommendation, risk_level, overall_score = generate_recommendation(
             predicted_return=predicted_return,
             sentiment_score=avg_sentiment_score,
-            fundamental_score=fundamental_row["Fundamental_Score"],
+            fundamental_score=fundamental_row["Composite_Rank"],
             investment_goal=investment_goal
         )
+
+        fund_label = "Kuat / Good Fundamental" if fundamental_row["Composite_Rank"] >= 0.5 else "Lemah / Weak Fundamental"
 
         explanation = generate_explanation(
             ticker=selected_ticker,
             recommendation=recommendation,
             predicted_return=predicted_return,
             sentiment_label=sentiment_label,
-            fundamental_label=fundamental_row["Fundamental_Label"],
+            fundamental_label=fund_label,
             investment_goal=investment_goal
         )
 
@@ -1113,6 +1418,7 @@ with summary_left:
             <div class="recommendation-main">{recommendation}</div>
             <div class="recommendation-desc">
                 Saham <b>{selected_ticker}</b> — {COMPANY_NAMES[selected_ticker]}<br>
+                Sektor: <b>Gold / Precious Metals</b><br>
                 Tujuan investasi: <b>{investment_goal}</b><br>
                 Sumber prediksi: <b>{model_source}</b>
             </div>
@@ -1253,35 +1559,36 @@ with tab3:
     f1, f2, f3, f4 = st.columns(4)
 
     with f1:
-        metric_card("PER", format_number(fundamental_row["PER"]), "Price Earnings Ratio")
+        metric_card("PBV x ROE", format_number(fundamental_row["PBV_x_ROE"]), "PBV dikali ROE")
     with f2:
-        metric_card("PBV", format_number(fundamental_row["PBV"]), "Price to Book Value")
+        metric_card("PE Discount", format_percent(fundamental_row["Price_to_Equity_Discount"] / 100), "Price to Equity Discount")
     with f3:
-        metric_card("EPS", format_number(fundamental_row["EPS"]), "Earnings Per Share")
+        metric_card("Relative PE", format_number(fundamental_row["Relative_PE_ratio"]), "Relative PE TTM")
     with f4:
-        metric_card("ROE", format_percent(fundamental_row["ROE"]), "Return on Equity")
+        metric_card("EPS Growth", format_percent(fundamental_row["EPS_Growth"]), "Pertumbuhan EPS")
 
     st.write("")
 
     f5, f6, f7, f8 = st.columns(4)
 
     with f5:
-        metric_card("DER", format_number(fundamental_row["DER"]), "Debt to Equity Ratio")
+        metric_card("Debt Ratio", format_number(fundamental_row["Debt_to_Total_Assets_Ratio"]), "Debt to Total Assets")
     with f6:
-        metric_card("Current Ratio", format_number(fundamental_row["Current_Ratio"]), "Likuiditas")
+        metric_card("Liquidity", format_number(fundamental_row["Liquidity_Differential"]), "Liquidity Differential")
     with f7:
-        metric_card("Market Cap", format_number(fundamental_row["Market_Cap"]), "Kapitalisasi pasar")
+        metric_card("Op. Efficiency", format_number(fundamental_row["Operating_Efficiency"]), "Operating Efficiency")
     with f8:
-        metric_card("Fundamental Score", f"{fundamental_row['Fundamental_Score']:.2f}", fundamental_row["Fundamental_Label"])
+        fund_label = "Kuat" if fundamental_row["Composite_Rank"] >= 0.5 else "Lemah"
+        metric_card("Composite Rank", f"{fundamental_row['Composite_Rank']:.2f}", fund_label)
 
     st.write("")
     st.markdown(
         f"""
         <div class="glass-card">
             <div class="metric-label">Kesimpulan Fundamental</div>
-            <div class="metric-value">{fundamental_row["Fundamental_Label"]}</div>
+            <div class="metric-value">{fund_label}</div>
             <div class="metric-small">
-                Skor fundamental dihitung dari kombinasi EPS, ROE, PBV, PER, DER, dan Current Ratio.
+                Skor Composite Rank mewakili kombinasi berbagai rasio fundamental penting perusahaan.
                 Nilai lebih tinggi menunjukkan kondisi fundamental yang lebih menarik.
             </div>
         </div>
