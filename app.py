@@ -10,7 +10,6 @@ import streamlit as st
 from urllib.parse import quote
 from datetime import datetime
 
-
 # ======================================================
 # PAGE CONFIG
 # ======================================================
@@ -432,24 +431,21 @@ TICKER_MAP = {
     "ANTM": "ANTM.JK",
     "MDKA": "MDKA.JK",
     "BRMS": "BRMS.JK",
-    "PSAB": "PSAB.JK",
-    "ACES": "ACES.JK"
+    "PSAB": "PSAB.JK"
 }
 
 COMPANY_NAMES = {
     "ANTM": "PT Aneka Tambang Tbk",
     "MDKA": "PT Merdeka Copper Gold Tbk",
     "BRMS": "PT Bumi Resources Minerals Tbk",
-    "PSAB": "PT J Resources Asia Pasifik Tbk",
-    "ACES": "PT Ace Hardware Indonesia Tbk"
+    "PSAB": "PT J Resources Asia Pasifik Tbk"
 }
 
 NEWS_KEYWORDS = {
     "ANTM": ["ANTM saham", "Antam emas", "Aneka Tambang saham", "ANTM emas"],
     "MDKA": ["MDKA saham", "Merdeka Copper Gold saham", "MDKA emas"],
     "BRMS": ["BRMS saham", "Bumi Resources Minerals saham", "BRMS emas"],
-    "PSAB": ["PSAB saham", "J Resources Asia Pasifik saham", "PSAB emas", "J Resources gold", "J Resources tambang emas"],
-    "ACES": ["ACES saham", "Ace Hardware saham", "ACES retail"]
+    "PSAB": ["PSAB saham", "J Resources Asia Pasifik saham", "PSAB emas", "J Resources gold", "J Resources tambang emas"]
 }
 
 MODEL_FEATURES = [
@@ -877,8 +873,49 @@ def generate_market_insight(sentiment_label, avg_score, top_category):
 
 
 # ======================================================
-# MODEL AND RECOMMENDATION
+# MODEL AND RECOMMENDATION (KAGGLE INJECTION)
 # ======================================================
+
+import skfuzzy as fuzz
+from skfuzzy import control as ctrl
+
+# Data Master Hasil 3 Pilar (XGBoost, IndoBERT, Piotroski Fundamental)
+KAGGLE_PILAR_DATA = {
+    "ANTM": {"pred_return": 0.2618, "sentiment_score": 0.0101, "graham_price": 3148.69, "piotroski_score": 8, "piotroski_fuzzy": 1.0},
+    "BRMS": {"pred_return": 0.0240, "sentiment_score": 0.0090, "graham_price": 138.86, "piotroski_score": 8, "piotroski_fuzzy": 1.0},
+    "MDKA": {"pred_return": -0.1500, "sentiment_score": -0.0609, "graham_price": 0.00, "piotroski_score": 6, "piotroski_fuzzy": -1.0},
+    "PSAB": {"pred_return": 0.0434, "sentiment_score": 0.0335, "graham_price": 297.24, "piotroski_score": 7, "piotroski_fuzzy": 0.0}
+}
+
+def eksekusi_fuzzy_mamdani(prediksi_return, skor_sentimen, skor_fundamental):
+    in_return = ctrl.Antecedent(np.arange(-10, 11, 0.1), 'return_ai')
+    in_sentimen = ctrl.Antecedent(np.arange(-1, 1.1, 0.1), 'sentimen')
+    in_fund = ctrl.Antecedent(np.arange(-1, 1.1, 0.1), 'fundamental')
+    out_keputusan = ctrl.Consequent(np.arange(0, 101, 1), 'rekomendasi')
+    
+    in_return.automf(names=['bearish', 'stagnan', 'bullish'])
+    in_sentimen.automf(names=['negatif', 'netral', 'positif'])
+    in_fund.automf(names=['sakit', 'biasa', 'sehat'])
+    out_keputusan.automf(names=['hindari', 'jangka_pendek', 'jangka_panjang'])
+    
+    r1 = ctrl.Rule(in_fund['sakit'] | in_sentimen['negatif'], out_keputusan['hindari'])
+    r2 = ctrl.Rule(in_fund['sehat'] & in_return['bullish'] & in_sentimen['positif'], out_keputusan['jangka_panjang'])
+    r3 = ctrl.Rule(in_fund['biasa'] & in_sentimen['positif'], out_keputusan['jangka_pendek'])
+    r4 = ctrl.Rule(in_return['bearish'] & in_fund['sakit'], out_keputusan['hindari'])
+    r5 = ctrl.Rule(in_return['bullish'] & in_fund['sehat'], out_keputusan['jangka_panjang'])
+    
+    mesin = ctrl.ControlSystem([r1, r2, r3, r4, r5])
+    simulasi = ctrl.ControlSystemSimulation(mesin)
+    
+    simulasi.input['return_ai'] = np.clip(prediksi_return * 100, -10, 10)
+    simulasi.input['sentimen'] = np.clip(skor_sentimen, -1, 1)
+    simulasi.input['fundamental'] = np.clip(skor_fundamental, -1, 1)
+    
+    try:
+        simulasi.compute()
+        return simulasi.output['rekomendasi']
+    except:
+        return 50.0
 
 @st.cache_resource
 def load_model():
@@ -938,66 +975,32 @@ def prepare_latest_row(stock_df, gold_df, fundamental_row, sentiment_score, news
     return latest
 
 
-def predict_return(latest_row):
-    model = load_model()
-
-    if model is None:
-        return fallback_predict_return(latest_row), "Rule-based fallback"
-
-    try:
-        X = pd.DataFrame([latest_row[MODEL_FEATURES]])
-        prediction = model.predict(X)[0]
-        return float(prediction), "Random Forest Model"
-    except Exception:
-        return fallback_predict_return(latest_row), "Rule-based fallback"
+def predict_return(ticker):
+    data = KAGGLE_PILAR_DATA.get(ticker)
+    if data:
+        return float(data["pred_return"]), "XGBoost & GRU (Late Fusion)"
+    return 0.02, "Rule-based fallback"
 
 
-def generate_recommendation(predicted_return, sentiment_score, fundamental_score, investment_goal):
-    predicted_pct = predicted_return * 100
-
-    if investment_goal == "Jangka Pendek":
-        if predicted_pct < 1:
-            recommendation = "Tidak Disarankan"
-            risk = "Tinggi"
-        elif 1 <= predicted_pct < 3:
-            if sentiment_score >= 0:
-                recommendation = "Jangka Pendek"
-                risk = "Sedang"
-            else:
-                recommendation = "Tidak Disarankan"
-                risk = "Tinggi"
-        elif predicted_pct >= 3:
-            if sentiment_score >= -0.1:
-                recommendation = "Jangka Pendek"
-                risk = "Sedang"
-            else:
-                recommendation = "Overhyped / Hindari"
-                risk = "Tinggi"
-        else:
-            recommendation = "Tidak Disarankan"
-            risk = "Tinggi"
-
+def generate_recommendation(ticker, predicted_return, sentiment_score, fundamental_score, investment_goal):
+    data = KAGGLE_PILAR_DATA.get(ticker)
+    
+    if data:
+        skor_fuzzy = eksekusi_fuzzy_mamdani(data['pred_return'], data['sentiment_score'], data['piotroski_fuzzy'])
     else:
-        if fundamental_score >= 0.7 and predicted_pct >= 3 and sentiment_score >= -0.1:
-            recommendation = "Jangka Panjang"
-            risk = "Rendah - Sedang"
-        elif fundamental_score >= 0.4 and predicted_pct >= 2:
-            recommendation = "Jangka Pendek"
-            risk = "Sedang"
-        elif predicted_pct >= 3 and fundamental_score < 0.4:
-            recommendation = "Overhyped / Hindari"
-            risk = "Tinggi"
-        else:
-            recommendation = "Tidak Disarankan"
-            risk = "Tinggi"
+        skor_fuzzy = eksekusi_fuzzy_mamdani(predicted_return, sentiment_score, fundamental_score)
+        
+    if skor_fuzzy >= 65:
+        recommendation = "Jangka Panjang"
+        risk = "Rendah - Sedang"
+    elif skor_fuzzy >= 40:
+        recommendation = "Jangka Pendek"
+        risk = "Sedang"
+    else:
+        recommendation = "Overhyped / Hindari"
+        risk = "Tinggi"
 
-    overall_score = (
-        (min(max(predicted_pct / 8, 0), 1) * 0.40) +
-        ((sentiment_score + 1) / 2 * 0.25) +
-        (fundamental_score * 0.35)
-    ) * 100
-
-    return recommendation, risk, overall_score
+    return recommendation, risk, skor_fuzzy
 
 
 def generate_explanation(ticker, recommendation, predicted_return, sentiment_label, fundamental_label, investment_goal):
@@ -1039,9 +1042,9 @@ def calculate_risk_level(volatility, predicted_return, sentiment_score, fundamen
     """Menghitung Risk Level."""
     risk_score = 50
     
-    if fundamental_score >= 0.7:
+    if fundamental_score >= 0.5:
         risk_score -= 20
-    elif fundamental_score < 0.4:
+    elif fundamental_score < 0:
         risk_score += 30
         
     if volatility and not pd.isna(volatility):
@@ -1083,8 +1086,8 @@ def detect_overhyped_status(predicted_return, sentiment_score, news_count, funda
     if news_count > 20: hype_score += 15
     if predicted_return > 0.05: hype_score += 20
         
-    if fundamental_score >= 0.7: hype_score -= 40
-    elif fundamental_score < 0.4: hype_score += 20
+    if fundamental_score >= 0.5: hype_score -= 40
+    elif fundamental_score < 0: hype_score += 20
         
     hype_score = max(0, min(100, hype_score))
     
@@ -1127,14 +1130,22 @@ def generate_watchlist():
             fund_dict = fund_row.iloc[0].to_dict()
             
             latest_row = prepare_latest_row(stock_df, gold_df, fund_dict, avg_score, news_count)
-            predicted_return, model_source = predict_return(latest_row)
+            
+            # INJEKSI DATA KAGGLE
+            data = KAGGLE_PILAR_DATA.get(ticker_name)
+            if data:
+                avg_score = data["sentiment_score"]
+                sentiment_label = "Positive" if avg_score > 0 else "Negative" if avg_score < 0 else "Neutral"
+                fund_dict["Composite_Rank"] = data["piotroski_fuzzy"]
             
             fundamental_score = fund_dict.get("Composite_Rank", 0)
-            fund_label = "Kuat / Good" if fundamental_score >= 0.5 else "Lemah / Weak"
+            fund_label = "Kuat / Good" if fundamental_score >= 0 else "Lemah / Weak"
+            
+            predicted_return, model_source = predict_return(ticker_name)
             
             # Predict for Jangka Pendek default for watchlist
             rec, risk, overall_score = generate_recommendation(
-                predicted_return, avg_score, fundamental_score, "Jangka Pendek"
+                ticker_name, predicted_return, avg_score, fundamental_score, "Jangka Pendek"
             )
             
             # Get Risk
@@ -1222,7 +1233,7 @@ def compare_stocks(ticker_1, ticker_2, investment_goal, watchlist_df):
 def render_market_news():
     # MARKET NEWS & TRENDS UI
 
-    st.markdown('<div class="section-title">🌍 Market News & Trends</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Market News & Trends</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="section-caption">Pantau berita emas, ekonomi, IHSG, komoditas, dan tren pasar terbaru dalam satu tempat.</div>',
         unsafe_allow_html=True
@@ -1292,7 +1303,7 @@ def render_market_news():
             st.markdown(
                 f"""
                 <div class="glass-card">
-                    <div class="metric-label">🔥 Trending Topics</div>
+                    <div class="metric-label">Trending Topics</div>
                     <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
                         {''.join([f'<span class="mini-chip">{topic}</span>' for topic in trending_topics])}
                     </div>
@@ -1339,7 +1350,7 @@ def render_market_news():
 
 def render_watchlist(watchlist_df):
     if watchlist_df is not None and not watchlist_df.empty:
-        st.markdown('<div class="section-title">📌 Watchlist Saham</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Watchlist Saham</div>', unsafe_allow_html=True)
         st.markdown('<div class="section-caption">Perbandingan cepat performa seluruh saham emas hari ini.</div>', unsafe_allow_html=True)
         
         display_cols = ["Ticker", "Close Price", "Daily Return", "Sentiment Label", "Fundamental Label", "Risk Level", "Hype Status", "Recommendation", "Overall Score"]
@@ -1457,10 +1468,10 @@ st.markdown(
             lalu dapatkan analisis yang lebih mudah dipahami.
         </div>
         <div class="hero-mini">
-            <div class="mini-chip">📈 Real-time Stock Data</div>
-            <div class="mini-chip">📰 News Sentiment</div>
-            <div class="mini-chip">🏦 Fundamental Analysis</div>
-            <div class="mini-chip">🤖 Prediction Model</div>
+            <div class="mini-chip">Real-time Stock Data</div>
+            <div class="mini-chip">News Sentiment</div>
+            <div class="mini-chip">Fundamental Analysis</div>
+            <div class="mini-chip">Prediction Model</div>
         </div>
     </div>
     """,
@@ -1611,12 +1622,19 @@ with st.spinner("Sedang mengambil data terbaru dan menjalankan analisis..."):
             st.error("Data fundamental untuk saham ini belum tersedia.")
             st.stop()
 
-        fundamental_row = ticker_fundamental.iloc[0]
+        fundamental_row = ticker_fundamental.iloc[0].copy()
 
         stock_df = fetch_stock_data(TICKER_MAP[selected_ticker])
         gold_df = fetch_gold_data()
         news_df = fetch_news(selected_ticker)
         news_df, avg_sentiment_score, sentiment_label, news_count = apply_sentiment(news_df)
+
+        # INJEKSI DATA KAGGLE
+        data = KAGGLE_PILAR_DATA.get(selected_ticker)
+        if data:
+            avg_sentiment_score = data["sentiment_score"]
+            sentiment_label = "Positive" if avg_sentiment_score > 0 else "Negative" if avg_sentiment_score < 0 else "Neutral"
+            fundamental_row["Composite_Rank"] = data["piotroski_fuzzy"]
 
         latest_row = prepare_latest_row(
             stock_df=stock_df,
@@ -1626,16 +1644,17 @@ with st.spinner("Sedang mengambil data terbaru dan menjalankan analisis..."):
             news_count=news_count
         )
 
-        predicted_return, model_source = predict_return(latest_row)
+        predicted_return, model_source = predict_return(selected_ticker)
 
         recommendation, risk_level, overall_score = generate_recommendation(
+            ticker=selected_ticker,
             predicted_return=predicted_return,
             sentiment_score=avg_sentiment_score,
             fundamental_score=fundamental_row["Composite_Rank"],
             investment_goal=investment_goal
         )
 
-        fund_label = "Kuat / Good Fundamental" if fundamental_row["Composite_Rank"] >= 0.5 else "Lemah / Weak Fundamental"
+        fund_label = "Kuat / Good Fundamental" if fundamental_row["Composite_Rank"] >= 0 else "Lemah / Weak Fundamental"
 
         explanation = generate_explanation(
             ticker=selected_ticker,
@@ -1718,14 +1737,14 @@ with summary_right:
 
 st.write("")
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
-    "📈 Harga Saham",
-    "📰 Sentimen Berita",
-    "🏦 Fundamental",
-    "🧠 Alasan Rekomendasi",
-    "🚨 Risk & Hype Detector",
-    "⚖️ Compare Stocks",
-    "🌍 Market News",
-    "📌 Full Watchlist"
+    "Harga Saham",
+    "Sentimen Berita",
+    "Fundamental",
+    "Alasan Rekomendasi",
+    "Risk & Hype Detector",
+    "Compare Stocks",
+    "Market News",
+    "Full Watchlist"
 ])
 
 
@@ -1850,7 +1869,7 @@ with tab3:
     with f7:
         metric_card("Op. Efficiency", format_number(fundamental_row["Operating_Efficiency"]), "Operating Efficiency")
     with f8:
-        fund_label = "Kuat" if fundamental_row["Composite_Rank"] >= 0.5 else "Lemah"
+        fund_label = "Kuat" if fundamental_row["Composite_Rank"] >= 0 else "Lemah"
         metric_card("Composite Rank", f"{fundamental_row['Composite_Rank']:.2f}", fund_label)
 
     st.write("")
@@ -1960,7 +1979,6 @@ st.markdown(
 )
         
 
-
 with tab5:
     st.markdown('<div class="section-title">Risk & Hype Detector</div>', unsafe_allow_html=True)
     st.markdown('<div class="section-caption">Analisis risiko volatilitas dan deteksi FOMO pasar.</div>', unsafe_allow_html=True)
@@ -2051,4 +2069,3 @@ with tab7:
 with tab8:
     watchlist_df_tab = generate_watchlist()
     render_watchlist(watchlist_df_tab)
-
