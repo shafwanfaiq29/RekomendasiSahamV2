@@ -6,5 +6,9 @@ plotly
 feedparser
 joblib
 scikit-learn
+scikit-fuzzy
 beautifulsoup4
 vaderSentiment
+tensorflow
+xgboost
+h5py

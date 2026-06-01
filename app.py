@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from urllib.parse import quote
 from datetime import datetime
+from utils.investment_simulator import simulate_investment_return
 
 # ======================================================
 # PAGE CONFIG
@@ -424,6 +425,31 @@ st.markdown(
 
 
 # ======================================================
+# SESSION STATE INITIALIZATION
+# ======================================================
+
+# Core analysis state
+if "analysis_submitted" not in st.session_state:
+    st.session_state.analysis_submitted = False
+if "selected_stock" not in st.session_state:
+    st.session_state.selected_stock = None
+if "selected_goal" not in st.session_state:
+    st.session_state.selected_goal = "Jangka Panjang"
+if "analysis_result" not in st.session_state:
+    st.session_state.analysis_result = None
+if "recommendation_result" not in st.session_state:
+    st.session_state.recommendation_result = None
+
+# Simulator state
+if "sim_amount" not in st.session_state:
+    st.session_state.sim_amount = 1000000
+if "sim_duration" not in st.session_state:
+    st.session_state.sim_duration = 6
+if "simulation_result" not in st.session_state:
+    st.session_state.simulation_result = None
+
+
+# ======================================================
 # CONFIG
 # ======================================================
 
@@ -441,23 +467,37 @@ COMPANY_NAMES = {
     "PSAB": "PT J Resources Asia Pasifik Tbk"
 }
 
+# Features used by GRU scaler (11 features — matching training notebook)
+SCALER_FEATURES = [
+    "Open", "High", "Low", "Close", "Volume",
+    "Gold_Close",                 # Macro_Gold_World proxy
+    "MA7", "MA30",               # SMA_10 / SMA_20 proxy
+    "Return",                    # Return_1d proxy
+    "Volatility",
+    "Gold_Return",
+]
+
+# Full 25-feature set for rule-based / fundamental analysis
+MODEL_FEATURES = [
+    "Open", "High", "Low", "Close", "Volume",
+    "Return", "MA7", "MA30", "Volatility",
+    "Gold_Close", "Gold_Return",
+    "Sentiment_Score", "News_Count",
+    "PBV_x_ROE", "Price_to_Equity_Discount", "Relative_PE_ratio",
+    "EPS_Growth", "Debt_to_Total_Assets_Ratio", "Liquidity_Differential",
+    "CCE", "Operating_Efficiency", "Dividend_Payout",
+    "Yearly_Price_Change", "Composite_Rank", "Net_Debt_to_Equity"
+]
+
+# GRU lookback window (must match training: 60 days)
+GRU_LOOKBACK = 60
+
 NEWS_KEYWORDS = {
     "ANTM": ["ANTM saham", "Antam emas", "Aneka Tambang saham", "ANTM emas"],
     "MDKA": ["MDKA saham", "Merdeka Copper Gold saham", "MDKA emas"],
     "BRMS": ["BRMS saham", "Bumi Resources Minerals saham", "BRMS emas"],
     "PSAB": ["PSAB saham", "J Resources Asia Pasifik saham", "PSAB emas", "J Resources gold", "J Resources tambang emas"]
 }
-
-MODEL_FEATURES = [
-    "Open", "High", "Low", "Close", "Volume",
-    "Return", "MA7", "MA30", "Volatility",
-    "Gold_Close", "Gold_Return",
-    "Sentiment_Score", "News_Count",
-    "PBV_x_ROE", "Price_to_Equity_Discount", "Relative_PE_ratio", 
-    "EPS_Growth", "Debt_to_Total_Assets_Ratio", "Liquidity_Differential", 
-    "CCE", "Operating_Efficiency", "Dividend_Payout", 
-    "Yearly_Price_Change", "Composite_Rank", "Net_Debt_to_Equity"
-]
 
 MARKET_NEWS_CATEGORIES = {
     "Semua Berita": [], # will be populated dynamically or handles all
@@ -916,7 +956,7 @@ def ambil_data_asli_kaggle():
             
         # --- INJEKSI DATA SENTIMEN INDOBERT ---
         # Sesuaiin format nama file dengan yang lu export kemarin (misal: sentimen_ANTM.JK.csv)
-        file_nlp = f"data/sentimen_{ticker}.JK.csv" 
+        file_nlp = f"data/sentimen_{ticker}.csv" 
         if os.path.exists(file_nlp):
             df_nlp = pd.read_csv(file_nlp)
             if not df_nlp.empty:
@@ -941,23 +981,44 @@ KAGGLE_PILAR_DATA = ambil_data_asli_kaggle()
 # }
 
 def eksekusi_fuzzy_mamdani(prediksi_return, skor_sentimen, skor_fundamental):
-    in_return = ctrl.Antecedent(np.arange(-10, 11, 0.1), 'return_ai')
-    in_sentimen = ctrl.Antecedent(np.arange(-1, 1.1, 0.1), 'sentimen')
-    in_fund = ctrl.Antecedent(np.arange(-1, 1.1, 0.1), 'fundamental')
+    universe_1 = np.arange(-10.01, 10.02, 0.01)
+    universe_2 = np.arange(-1.01, 1.02, 0.01)
+    
+    in_return = ctrl.Antecedent(universe_1, 'return_ai')
+    in_sentimen = ctrl.Antecedent(universe_2, 'sentimen')
+    in_fund = ctrl.Antecedent(universe_2, 'fundamental')
     out_keputusan = ctrl.Consequent(np.arange(0, 101, 1), 'rekomendasi')
     
-    in_return.automf(names=['bearish', 'stagnan', 'bullish'])
-    in_sentimen.automf(names=['negatif', 'netral', 'positif'])
-    in_fund.automf(names=['sakit', 'biasa', 'sehat'])
-    out_keputusan.automf(names=['hindari', 'jangka_pendek', 'jangka_panjang'])
+    in_return['bearish'] = fuzz.trimf(universe_1, [-10.01, -10.01, 0])
+    in_return['stagnan'] = fuzz.trimf(universe_1, [-5, 0, 5])
+    in_return['bullish'] = fuzz.trimf(universe_1, [0, 10.01, 10.01])
     
-    r1 = ctrl.Rule(in_fund['sakit'] | in_sentimen['negatif'], out_keputusan['hindari'])
-    r2 = ctrl.Rule(in_fund['sehat'] & in_return['bullish'] & in_sentimen['positif'], out_keputusan['jangka_panjang'])
-    r3 = ctrl.Rule(in_fund['biasa'] & in_sentimen['positif'], out_keputusan['jangka_pendek'])
-    r4 = ctrl.Rule(in_return['bearish'] & in_fund['sakit'], out_keputusan['hindari'])
-    r5 = ctrl.Rule(in_return['bullish'] & in_fund['sehat'], out_keputusan['jangka_panjang'])
+    in_sentimen['negatif'] = fuzz.trimf(universe_2, [-1.01, -1.01, 0])
+    in_sentimen['netral'] = fuzz.trimf(universe_2, [-0.5, 0, 0.5])
+    in_sentimen['positif'] = fuzz.trimf(universe_2, [0, 1.01, 1.01])
     
-    mesin = ctrl.ControlSystem([r1, r2, r3, r4, r5])
+    in_fund['sakit'] = fuzz.trimf(universe_2, [-1.01, -1.01, 0])
+    in_fund['biasa'] = fuzz.trimf(universe_2, [-0.5, 0, 0.5])
+    in_fund['sehat'] = fuzz.trimf(universe_2, [0, 1.01, 1.01])
+    
+    out_keputusan['hindari'] = fuzz.trimf(out_keputusan.universe, [0, 0, 45])
+    out_keputusan['jangka_pendek'] = fuzz.trimf(out_keputusan.universe, [35, 50, 65])
+    out_keputusan['jangka_panjang'] = fuzz.trimf(out_keputusan.universe, [55, 100, 100])
+    
+    # Complete rules matrix
+    r1 = ctrl.Rule(in_fund['sakit'], out_keputusan['hindari'])
+    r2 = ctrl.Rule(in_sentimen['negatif'], out_keputusan['hindari'])
+    r3 = ctrl.Rule(in_return['bearish'] & in_fund['biasa'], out_keputusan['hindari'])
+    
+    r4 = ctrl.Rule(in_return['bearish'] & in_fund['sehat'], out_keputusan['jangka_pendek'])
+    r5 = ctrl.Rule(in_return['stagnan'] & in_fund['biasa'], out_keputusan['jangka_pendek'])
+    r6 = ctrl.Rule(in_return['stagnan'] & in_fund['sehat'], out_keputusan['jangka_pendek'])
+    r7 = ctrl.Rule(in_return['bullish'] & in_fund['biasa'], out_keputusan['jangka_pendek'])
+    
+    r8 = ctrl.Rule(in_return['bullish'] & in_fund['sehat'] & in_sentimen['positif'], out_keputusan['jangka_panjang'])
+    r9 = ctrl.Rule(in_return['bullish'] & in_fund['sehat'] & in_sentimen['netral'], out_keputusan['jangka_panjang'])
+    
+    mesin = ctrl.ControlSystem([r1, r2, r3, r4, r5, r6, r7, r8, r9])
     simulasi = ctrl.ControlSystemSimulation(mesin)
     
     simulasi.input['return_ai'] = np.clip(prediksi_return * 100, -10, 10)
@@ -977,64 +1038,200 @@ import pandas as pd
 import streamlit as st
 
 # ======================================================
-# MODEL AND RECOMMENDATION (STACKING ENSEMBLE ROUTING)
+# MODEL LOADER — GRU (.h5) + XGBoost (.json) + Scaler (.pkl)
 # ======================================================
 
 @st.cache_resource(ttl=3600)
-def load_model_dinamis(ticker):
+def load_ml_models(ticker):
     """
-    Ngeload 3 Model sekaligus (XGBoost, GRU, Meta Model) ke dalam RAM 8GB lu.
-    """
-    clean_ticker = ticker.split('.')[0] 
-    
-    # Path ketiga model sesuai screenshot lu
-    path_xgb = f"models/model_xgb_{clean_ticker}.JK.pkl"
-    path_gru = f"models/model_gru_{clean_ticker}.JK.pkl"
-    path_meta = f"models/meta_model_{clean_ticker}.JK.pkl"
-    
-    if os.path.exists(path_xgb) and os.path.exists(path_gru) and os.path.exists(path_meta):
-        xgb = joblib.load(path_xgb)
-        gru = joblib.load(path_gru)
-        meta = joblib.load(path_meta)
-        return {"xgb": xgb, "gru": gru, "meta": meta}
-    
-    return None
+    Load GRU (Keras .h5), XGBoost (native .json), dan Scaler (.pkl)
+    untuk ticker yang diberikan.
 
-def predict_return(ticker, latest_row):
+    File convention:
+        models/gru_{TICKER}.JK.h5
+        models/xgb_{TICKER}.JK.json       <- XGB takes GRU bottleneck embedding
+        models/scaler_{TICKER}.JK.pkl     <- fitted on 11 SCALER_FEATURES
     """
-    Eksekusi Stacking Ensemble: XGB + GRU -> Meta Model
-    """
-    models = load_model_dinamis(ticker)
+    ticker_jk = TICKER_MAP.get(ticker, ticker + ".JK")   # e.g. ANTM → ANTM.JK
 
-    if models is None:
-        return fallback_predict_return(latest_row), "Rule-based Fallback (Model Ga Lengkap)"
+    gru_path    = f"models/gru_{ticker_jk}.h5"
+    xgb_path    = f"models/xgb_{ticker_jk}.json"
+    scaler_path = f"models/scaler_{ticker_jk}.pkl"
 
-    try:
-        # 1. Siapkan data mentah
-        X = pd.DataFrame([latest_row[MODEL_FEATURES]])
-        
-        # 2. Base Models nebak duluan
-        pred_xgb = models["xgb"].predict(X)[0]
-        
-        # GRU biasanya butuh format array 2D/3D tergantung cara lu ngebungkus di Kaggle
-        # Kalau error dimensi, ubah jadi X.values atau X.values.reshape(1, 1, -1)
+    print(f"[DEBUG] Selected ticker  : {ticker}")
+    print(f"[DEBUG] GRU model path   : {gru_path}")
+    print(f"[DEBUG] XGB model path   : {xgb_path}")
+    print(f"[DEBUG] Scaler path      : {scaler_path}")
+
+    result = {}
+
+    # --- Load Scaler (11 features) ---
+    if os.path.exists(scaler_path):
         try:
-            pred_gru = models["gru"].predict(X)[0] 
-        except:
-            pred_gru = models["gru"].predict(X.values)[0]
+            result["scaler"] = joblib.load(scaler_path)
+            print(f"[DEBUG] Scaler loaded OK : {scaler_path} (n_features={result['scaler'].n_features_in_})")
+        except Exception as e:
+            print(f"[ERROR] Scaler load failed: {e}")
+    else:
+        print(f"[WARN]  Scaler not found : {scaler_path}")
+
+    # --- Load GRU (Keras .h5) ---
+    if os.path.exists(gru_path):
+        try:
+            from tensorflow import keras
             
-        # 3. Mandor (Meta Model) gabungin tebakan mereka pakai Numpy Array biar kebal error nama kolom
-        X_meta = np.array([[pred_xgb, pred_gru]])
-        final_pred = models["meta"].predict(X_meta)[0]
+            # Patch Attention layer to handle callable score_mode saved in the model
+            class CustomAttention(keras.layers.Attention):
+                def __init__(self, *args, **kwargs):
+                    if 'score_mode' in kwargs and callable(kwargs['score_mode']):
+                        kwargs['score_mode'] = 'dot'
+                    super().__init__(*args, **kwargs)
+
+            result["gru"] = keras.models.load_model(
+                gru_path, 
+                custom_objects={'Attention': CustomAttention},
+                compile=False
+            )
+            print(f"[DEBUG] GRU loaded OK    : {gru_path} input={result['gru'].input_shape}")
+        except Exception as e:
+            print(f"[ERROR] GRU load failed  : {e}")
+    else:
+        print(f"[WARN]  GRU not found    : {gru_path}")
+
+    # --- Load XGBoost (native JSON, takes GRU bottleneck embedding) ---
+    if os.path.exists(xgb_path):
+        try:
+            import xgboost as xgb_lib
+            xgb_model = xgb_lib.XGBRegressor()
+            xgb_model.load_model(xgb_path)
+            result["xgb"] = xgb_model
+            print(f"[DEBUG] XGB loaded OK    : {xgb_path}")
+        except Exception as e:
+            print(f"[ERROR] XGB load failed  : {e}")
+    else:
+        print(f"[WARN]  XGB not found    : {xgb_path}")
+
+    print("===== MODEL LOAD CHECK =====")
+    print("Ticker:", ticker)
+    print("GRU Exists:", os.path.exists(gru_path))
+    print("XGB Exists:", os.path.exists(xgb_path))
+    print("Scaler Exists:", os.path.exists(scaler_path))
+    print("GRU Loaded:", result.get("gru") is not None)
+    print("XGB Loaded:", result.get("xgb") is not None)
+    print("Scaler Loaded:", result.get("scaler") is not None)
+
+    return result if result else None
+
+
+def build_gru_window(stock_df, gold_df, scaler, ticker):
+    """
+    Bangun window 60-hari untuk input GRU.
+    Mengembalikan array shape (1, 60, 11) atau None jika data kurang.
+    """
+    try:
+        # Merge stock + gold
+        merged = pd.merge(
+            stock_df,
+            gold_df[["Date", "Gold_Close", "Gold_Return"]],
+            on="Date",
+            how="left"
+        ).ffill().dropna(subset=["Close"]).reset_index(drop=True)
+
+        # Pastikan semua SCALER_FEATURES tersedia
+        for col in SCALER_FEATURES:
+            if col not in merged.columns:
+                merged[col] = 0.0
+
+        window_df = merged[SCALER_FEATURES].tail(GRU_LOOKBACK).copy()
+        window_df = window_df.ffill().fillna(0.0)
+
+        if len(window_df) < GRU_LOOKBACK:
+            print(f"[WARN]  Data hanya {len(window_df)} baris, GRU butuh {GRU_LOOKBACK}")
+            # Pad with first row if not enough data
+            pad_rows = GRU_LOOKBACK - len(window_df)
+            pad_df = pd.concat([window_df.iloc[[0]] * pad_rows, window_df], ignore_index=True)
+            window_df = pad_df
+
+        X_raw = window_df.values.astype(np.float32)          # (60, 11)
         
-        clean_ticker = ticker.split('.')[0]
-        sumber = f"Stacking Ensemble XGB+GRU ({clean_ticker})"
+        print("Scaler Columns Used:", SCALER_FEATURES)
+        print("Incoming Columns:", list(window_df.columns))
         
-        return float(final_pred), sumber
+        X_scaled = scaler.transform(X_raw)                    # (60, 11)
+        X_gru = X_scaled.reshape(1, GRU_LOOKBACK, len(SCALER_FEATURES))  # (1, 60, 11)
         
+        print("===== PREDICTION INPUT CHECK =====")
+        print("Ticker:", ticker)
+        print("Scaler Feature Shape:", X_scaled.shape)
+        print("GRU Window Shape:", X_gru.shape)
+        print("Feature Columns:", SCALER_FEATURES)
+        
+        return X_gru
     except Exception as e:
-        print(f"Error Model Inference: {e}")
-        return fallback_predict_return(latest_row), "Rule-based Fallback (Error Dimensi)"
+        print("ML prediction error:", e)
+        raise e
+
+
+def predict_return(ticker, latest_row, stock_df=None, gold_df=None):
+    """
+    Prediksi return saham dengan prioritas:
+      1. GRU (60-step window)  — jika berhasil load & predict
+      2. XGBoost (GRU bottleneck) — jika GRU predict berhasil ambil embedding
+      3. Rule-based             — hanya jika semua model gagal
+    """
+    models = load_ml_models(ticker)
+
+    # ====================================================
+    # PRIORITY 1+2 — GRU → XGBoost stacking
+    # ====================================================
+    gru_model = models.get("gru") if models else None
+    xgb_model = models.get("xgb") if models else None
+    scaler    = models.get("scaler") if models else None
+
+    if gru_model is not None and scaler is not None and stock_df is not None and gold_df is not None:
+        X_gru = build_gru_window(stock_df, gold_df, scaler, ticker)
+        if X_gru is not None:
+            # Removed try-except to expose original errors
+            # Extract GRU bottleneck: use intermediate layer output
+            from tensorflow import keras
+            # Get the penultimate layer (bottleneck before dense output)
+            bottleneck_model = keras.Model(
+                inputs=gru_model.input,
+                outputs=gru_model.layers[-2].output
+            )
+            gru_features = bottleneck_model.predict(X_gru, verbose=0)  # (1, N)
+            
+            print("GRU Embedding Shape:", gru_features.shape)
+            print("GRU Embedding:", gru_features[:5])
+            
+            if xgb_model is not None:
+                print("XGB Input Shape:", gru_features.shape)
+                print("XGB Expected Features:", xgb_model.n_features_in_)
+                
+                if gru_features.shape[1] != xgb_model.n_features_in_:
+                    raise ValueError(f"XGBoost expected {xgb_model.n_features_in_} features, but got {gru_features.shape[1]}")
+                
+                pred_xgb = float(xgb_model.predict(gru_features)[0])
+                
+                print("===== XGBOOST OUTPUT =====")
+                print("Predicted Return:", pred_xgb)
+                print("Prediction Type:", type(pred_xgb))
+                
+                prediction_source = "Machine Learning (GRU+XGBoost)"
+                print("===== FINAL SOURCE =====")
+                print("Prediction Source:", prediction_source)
+                return pred_xgb, prediction_source
+            else:
+                raise ValueError("XGBoost model is missing!")
+
+    # ====================================================
+    # PRIORITY 3 — Rule-based fallback
+    # ====================================================
+    print("[WARN] ML models failed to load or missing dependencies. Using Rule-Based fallback.")
+    val = fallback_predict_return(latest_row)
+    print(f"[DEBUG] Prediction source  : Rule-Based Evaluation")
+    print(f"[DEBUG] Predicted return   : {val:.6f}")
+    return val, "Rule-Based Evaluation"
     
 # @st.cache_resource
 # def load_model():
@@ -1094,12 +1291,8 @@ def prepare_latest_row(stock_df, gold_df, fundamental_row, sentiment_score, news
     return latest
 
 def generate_recommendation(ticker, predicted_return, sentiment_score, fundamental_score, investment_goal):
-    data = KAGGLE_PILAR_DATA.get(ticker)
-    
-    if data:
-        skor_fuzzy = eksekusi_fuzzy_mamdani(data['pred_return'], data['sentiment_score'], data['piotroski_fuzzy'])
-    else:
-        skor_fuzzy = eksekusi_fuzzy_mamdani(predicted_return, sentiment_score, fundamental_score)
+    # Jalankan logika fuzzy secara dinamis menggunakan input yang dilewatkan
+    skor_fuzzy = eksekusi_fuzzy_mamdani(predicted_return, sentiment_score, fundamental_score)
         
     if skor_fuzzy >= 65:
         recommendation = "Jangka Panjang"
@@ -1252,7 +1445,7 @@ def generate_watchlist():
             fundamental_score = fund_dict.get("Composite_Rank", 0)
             fund_label = "Kuat / Good" if fundamental_score >= 0 else "Lemah / Weak"
             
-            predicted_return, model_source = predict_return(selected_ticker, latest_row)
+            predicted_return, model_source = predict_return(ticker_name, latest_row, stock_df=stock_df, gold_df=gold_df)
             
             # Predict for Jangka Pendek default for watchlist
             rec, risk, overall_score = generate_recommendation(
@@ -1620,21 +1813,27 @@ with input_col2:
     st.markdown(
         '''
         <div style="font-size: 0.82rem; color: #94a3b8; margin-top: 5px; padding-left: 2px;">
-            <i style="color: #cbd5e1;"><b>Jangka Pendek:</b> 1 hr - 1 bln</i> &nbsp;|&nbsp; <i style="color: #cbd5e1;"><b>Jangka Panjang:</b> 6 bln - 1 thn+</i>
+            <i style="color: #cbd5e1;"><b>Jangka Pendek:</b> Bulanan</i> &nbsp;|&nbsp; <i style="color: #cbd5e1;"><b>Jangka Panjang:</b> Tahunan</i>
         </div>
         ''', unsafe_allow_html=True
     )
 
 with input_col3:
     st.write("")
-    analyze_button = st.button("Analisis Saham Sekarang")
+    if st.button("Analisis Saham Sekarang"):
+        st.session_state.selected_stock = selected_ticker
+        st.session_state.selected_goal = investment_goal
+        st.session_state.analysis_submitted = True
+        st.session_state.sim_duration = 6 if investment_goal == "Jangka Pendek" else 3
+        st.session_state.simulation_result = None   # reset simulator result on new analysis
+        st.rerun()
 
 
 # ======================================================
-# DEFAULT MESSAGE
+# DEFAULT MESSAGE (HOME PAGE)
 # ======================================================
 
-if not analyze_button:
+if not st.session_state.analysis_submitted:
     st.write("")
     with st.spinner("Memuat Top Pick & Watchlist (Data Real-time)..."):
         watchlist_df = generate_watchlist()
@@ -1719,8 +1918,11 @@ if not analyze_button:
 
 
 # ======================================================
-# ANALYSIS PROCESS
+# ANALYSIS PROCESS (RESULT PAGE)
 # ======================================================
+
+selected_ticker = st.session_state.selected_stock
+investment_goal = st.session_state.selected_goal
 
 with st.spinner("Sedang mengambil data terbaru dan menjalankan analisis..."):
     time.sleep(0.7)
@@ -1755,7 +1957,7 @@ with st.spinner("Sedang mengambil data terbaru dan menjalankan analisis..."):
             news_count=news_count
         )
 
-        predicted_return, model_source = predict_return(selected_ticker, latest_row)
+        predicted_return, model_source = predict_return(selected_ticker, latest_row, stock_df=stock_df, gold_df=gold_df)
 
         recommendation, risk_level, overall_score = generate_recommendation(
             ticker=selected_ticker,
@@ -1778,15 +1980,67 @@ with st.spinner("Sedang mengambil data terbaru dan menjalankan analisis..."):
         
         risk_level_str, risk_score, risk_reason = calculate_risk_level(latest_row.get("Volatility", 0), predicted_return, avg_sentiment_score, fundamental_row["Composite_Rank"], investment_goal)
         hype_status, hype_score, hype_reason = detect_overhyped_status(predicted_return, avg_sentiment_score, news_count, fundamental_row["Composite_Rank"])
+        
+        # SAVE TO SESSION STATE
+        st.session_state.analysis_result = {
+            "stock_df": stock_df,
+            "gold_df": gold_df,
+            "news_df": news_df,
+            "fundamental_row": fundamental_row,
+            "latest_row": latest_row,
+            "predicted_return": predicted_return,
+            "sentiment_score": avg_sentiment_score,
+            "sentiment_label": sentiment_label,
+            "news_count": news_count,
+            "model_source": model_source
+        }
+        st.session_state.recommendation_result = {
+            "recommendation": recommendation,
+            "risk_level": risk_level_str,
+            "risk_score": risk_score,
+            "risk_reason": risk_reason,
+            "overall_score": overall_score,
+            "fund_label": fund_label,
+            "explanation": explanation,
+            "hype_status": hype_status,
+            "hype_score": hype_score,
+            "hype_reason": hype_reason
+        }
 
     except Exception as e:
         st.error(f"Analisis gagal dijalankan: {e}")
+        st.session_state.analysis_submitted = False
         st.stop()
+
+# RETRIEVE FROM SESSION STATE
+recommendation = st.session_state.recommendation_result["recommendation"]
+risk_level_str = st.session_state.recommendation_result["risk_level"]
+risk_score     = st.session_state.recommendation_result["risk_score"]
+risk_reason    = st.session_state.recommendation_result["risk_reason"]
+overall_score  = st.session_state.recommendation_result["overall_score"]
+fund_label     = st.session_state.recommendation_result["fund_label"]
+explanation    = st.session_state.recommendation_result["explanation"]
+hype_status    = st.session_state.recommendation_result["hype_status"]
+hype_score     = st.session_state.recommendation_result["hype_score"]
+hype_reason    = st.session_state.recommendation_result["hype_reason"]
+
+stock_df          = st.session_state.analysis_result["stock_df"]
+gold_df           = st.session_state.analysis_result["gold_df"]
+news_df           = st.session_state.analysis_result["news_df"]
+fundamental_row   = st.session_state.analysis_result["fundamental_row"]
+latest_row        = st.session_state.analysis_result["latest_row"]
+predicted_return  = st.session_state.analysis_result["predicted_return"]
+avg_sentiment_score = st.session_state.analysis_result["sentiment_score"]
+sentiment_label   = st.session_state.analysis_result["sentiment_label"]
+news_count        = st.session_state.analysis_result["news_count"]
+model_source      = st.session_state.analysis_result["model_source"]
 
 
 # ======================================================
 # RESULT SUMMARY
 # ======================================================
+
+st.markdown('<div id="result-anchor"></div>', unsafe_allow_html=True)
 
 
 def get_risk_badge(level):
@@ -1805,18 +2059,37 @@ badge_class = get_badge_class(recommendation)
 summary_left, summary_right = st.columns([1.45, 1])
 
 with summary_left:
+    # Determine analysis source label
+    if "Machine Learning" in model_source:
+        source_label = f"Machine Learning Prediction ({model_source.replace('Machine Learning ', '').replace('(', '').replace(')', '')}) + Fundamental &amp; Sentiment Analysis"
+        source_color = "#4ade80"
+    else:
+        source_label = "Rule-Based Evaluation (Model ML tidak tersedia)"
+        source_color = "#fb923c"
+
+    # Determine recommendation explanation text
+    if recommendation == "Jangka Panjang":
+        recommendation_desc_text = "Cocok untuk investasi jangka menengah hingga panjang. Saham ini dinilai memiliki potensi pertumbuhan yang lebih optimal jika disimpan lebih lama dibanding untuk trading cepat."
+    elif recommendation == "Jangka Pendek":
+        recommendation_desc_text = "Cocok untuk strategi investasi jangka pendek. Potensi pergerakan saham dinilai lebih menarik dalam waktu dekat berdasarkan kondisi pasar saat ini."
+    else:
+        recommendation_desc_text = "Perlu kehati-hatian. Saat ini saham memiliki risiko yang cukup tinggi atau valuasinya dinilai kurang menarik untuk investasi."
+
     st.markdown(
         f"""
         <div class="gold-card">
             <div class="recommendation-title">Rekomendasi Akhir</div>
             <div class="recommendation-main">{recommendation}</div>
+            <div style="font-size: 0.95rem; color: #e2e8f0; margin-bottom: 12px; margin-top: 4px;">
+                {recommendation_desc_text}
+            </div>
             <div class="recommendation-desc">
                 Saham <b>{selected_ticker}</b> — {COMPANY_NAMES[selected_ticker]}<br>
                 Sektor: <b>Gold / Precious Metals</b><br>
                 Tujuan investasi: <b>{investment_goal}</b><br>
-                Sumber prediksi: <b>{model_source}</b>
+                Sumber analisis: <b style="color:{source_color};">🤖 {source_label}</b>
             </div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
                 <div class="badge {badge_class}">{recommendation}</div>
                 <div class="badge {get_risk_badge(risk_level_str)}">{risk_level_str}</div>
                 <div class="badge {get_hype_badge(hype_status)}">{hype_status}</div>
@@ -1841,6 +2114,197 @@ with summary_right:
     with r4:
         metric_card("News Count", f"{news_count}", "Berita terbaru")
 
+
+# ======================================================
+# NAVIGATION BUTTON (BACK TO HOME)
+# ======================================================
+
+st.write("")
+nav_col1, nav_col2 = st.columns([1, 3])
+
+with nav_col1:
+    if st.button("← Ganti Saham Lain", use_container_width=True):
+        st.session_state.analysis_submitted = False
+        st.session_state.selected_stock = None
+        st.session_state.selected_goal = "Jangka Panjang"
+        st.session_state.analysis_result = None
+        st.session_state.recommendation_result = None
+        st.session_state.simulation_result = None
+        st.session_state.sim_amount = 1000000
+        st.session_state.sim_duration = 6
+        st.rerun()
+
+st.write("")
+st.markdown("---")
+
+# ======================================================
+# CONDITIONAL INVESTMENT RETURN SIMULATOR
+# ======================================================
+
+# Check if recommendation is suitable for simulator
+simulator_eligible = recommendation in ["Jangka Pendek", "Jangka Panjang"]
+
+if simulator_eligible:
+    st.write("")
+    st.markdown('<div class="section-title">Investment Return</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="section-caption">Estimasi nilai investasi untuk <b>{selected_ticker}</b> dengan tujuan <b>{investment_goal}</b>.</div>',
+        unsafe_allow_html=True
+    )
+    
+    # Form for investment simulator
+    with st.form("investment_simulator_form", border=False):
+        sim_col1, sim_col2 = st.columns([1.5, 1.2])
+        
+        with sim_col1:
+            sim_amount = st.number_input(
+                "Masukkan Nominal Investasi (Rp)",
+                min_value=100000,
+                value=st.session_state.sim_amount,
+                step=100000,
+                format="%d",
+                help="Minimal Rp 100.000"
+            )
+        
+        with sim_col2:
+            if investment_goal == "Jangka Pendek":
+                sim_duration = st.number_input(
+                    "Durasi Investasi (Bulan)",
+                    min_value=1,
+                    max_value=12,
+                    value=min(st.session_state.sim_duration, 12),
+                    step=1,
+                    placeholder="Masukkan jumlah bulan",
+                    help="Contoh: 1–12 bulan"
+                )
+            else:
+                sim_duration = st.number_input(
+                    "Durasi Investasi (Tahun)",
+                    min_value=1,
+                    max_value=10,
+                    value=max(st.session_state.sim_duration, 1),
+                    step=1,
+                    placeholder="Masukkan jumlah tahun",
+                    help="Contoh: 1–10 tahun"
+                )
+        
+        # Submit button
+        submit_button = st.form_submit_button("Hitung Estimasi Return", use_container_width=True)
+    
+    # Execute calculation when form is submitted
+    if submit_button:
+        # Save inputs to session state
+        st.session_state.sim_amount = sim_amount
+        st.session_state.sim_duration = sim_duration
+        
+        try:
+            with st.spinner("Menghitung estimasi investasi..."):
+                latest_row = st.session_state.analysis_result["latest_row"]
+                st.session_state.simulation_result = simulate_investment_return(
+                    investment_amount=st.session_state.sim_amount,
+                    current_price=latest_row["Close"],
+                    ticker=selected_ticker,
+                    investment_goal=investment_goal,
+                    duration=st.session_state.sim_duration,
+                    predicted_return=predicted_return,   # pass live ML prediction
+                )
+            st.success("Selesai!")
+        except Exception as e:
+            st.error(f"Error dalam kalkulasi: {str(e)}")
+            st.session_state.simulation_result = None
+    
+    # Display results if available (persistent via session_state)
+    if st.session_state.simulation_result is not None:
+        sim_result = st.session_state.simulation_result
+        
+        st.write("")
+        st.markdown('<div id="simulator-result-anchor"></div>', unsafe_allow_html=True)
+        st.markdown("---")
+        st.markdown('<div style="text-align: center; color: #f7d774; font-size: 1.2rem; margin-bottom: 1.5rem;"><b>Hasil Simulasi Investasi</b></div>', unsafe_allow_html=True)
+        
+        # Display metric cards
+        result_col1, result_col2, result_col3 = st.columns(3)
+        
+        with result_col1:
+            metric_card("Modal Investasi", sim_result["formatted"]["investment_amount"], "Modal awal")
+        with result_col2:
+            metric_card("Harga Saham Saat Ini", sim_result["formatted"]["current_price"], "Harga per lembar")
+        with result_col3:
+            metric_card("Est. Jumlah Saham", sim_result["formatted"]["estimated_shares"], "Estimasi lembar terbeli")
+        
+        st.write("")
+        result_col4, result_col5, result_col6 = st.columns(3)
+        
+        with result_col4:
+            metric_card("Est. Harga Masa Depan", sim_result["formatted"]["future_price"], "Per lembar di masa depan")
+        with result_col5:
+            metric_card("Est. Nilai Akhir", sim_result["formatted"]["future_value"], "Total estimasi nilai")
+        with result_col6:
+            metric_card("Est. Profit / Loss", sim_result["formatted"]["profit"], "Total keuntungan / kerugian")
+            
+        st.write("")
+        result_col7, result_col8, result_col9 = st.columns(3)
+        
+        with result_col7:
+            metric_card("Persentase Return", sim_result["formatted"]["percent_gain"], "Total persentase keuntungan")
+        with result_col8:
+            metric_card("Annualized Return", sim_result["formatted"]["annualized_return"], "Return per tahun")
+        with result_col9:
+            metric_card("Risk Level", sim_result["risk_level"], "Tingkat risiko estimasi")
+        
+        # Display chart
+        st.write("")
+        st.plotly_chart(sim_result["chart_fig"], use_container_width=True)
+        
+        # Display insight
+        st.write("")
+        st.markdown(
+            f'''
+            <div class="glass-card" style="padding: 1.5rem; border-left: 4px solid #f7d774; margin-top: 1.5rem;">
+                <div style="color: #e2e8f0; line-height: 1.6;">
+                    💡 <b>Insight:</b> {sim_result['insight']}
+                </div>
+            </div>
+            ''',
+            unsafe_allow_html=True
+        )
+        
+        # Display disclaimer
+        st.write("")
+        st.markdown(
+            '''
+            <div style="background-color: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                <div style="color: #fca5a5; font-size: 0.9rem;">
+                    ⚠️ <b>Disclaimer:</b> Estimasi return ini didasarkan pada prediksi model historis dan bukan jaminan return masa depan. 
+                    Investasi saham mengandung risiko. Lakukan riset mendalam sebelum mengambil keputusan investasi.
+                </div>
+            </div>
+            ''',
+            unsafe_allow_html=True
+        )
+
+else:
+    # Show warning card — simulasi tidak ditampilkan untuk saham tidak direkomendasikan
+    st.write("")
+    st.markdown(
+        f'''
+        <div style="background-color: rgba(249, 115, 22, 0.08); border: 2px solid rgba(249, 115, 22, 0.5); padding: 2rem; border-radius: 16px; margin-top: 1.5rem; text-align: center;">
+            <div style="color: #fed7aa; font-size: 1.3rem; font-weight: 700; margin-bottom: 1rem;">⚠️ Simulasi Tidak Ditampilkan</div>
+            <div style="color: #fbbf24; font-size: 1rem; line-height: 1.7; max-width: 700px; margin: 0 auto;">
+                Simulasi investasi tidak ditampilkan karena saham <b>{selected_ticker}</b> saat ini
+                tidak direkomendasikan berdasarkan hasil analisis sistem
+                (rekomendasi: <b>{recommendation}</b>).
+                <br><br>
+                Silakan pertimbangkan saham lain dengan rekomendasi <b>Jangka Pendek</b>
+                atau <b>Jangka Panjang</b>, atau tunggu hingga kondisi fundamental dan sentimen membaik.
+            </div>
+        </div>
+        ''',
+        unsafe_allow_html=True
+    )
+
+st.write("")
+st.markdown("---")
 
 # ======================================================
 # TABS
