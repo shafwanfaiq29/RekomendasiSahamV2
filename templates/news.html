@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% set active_page = "news" %}
+{% block title %}Market News - GoldStock Insight{% endblock %}
+
+{% block content %}
+<div class="flex flex-col gap-6 max-w-7xl mx-auto pb-10">
+
+    <div class="flex justify-between items-end">
+        <div class="w-2/3">
+            <h1 class="text-3xl font-extrabold text-text-main mb-2">Market News & Trends</h1>
+            <p class="text-text-muted text-sm leading-relaxed">Berita terkini seputar pergerakan emas global dan sentimen pasar untuk emiten tambang Indonesia.</p>
+        </div>
+        
+        <div class="bg-surface border border-border-color p-3 rounded-xl shadow-sm flex gap-4 items-center">
+            <div class="text-xs font-bold text-text-muted uppercase tracking-widest">Market Sentiment</div>
+            <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full {% if avg_score > 0 %}bg-[#16a34a]{% elif avg_score < 0 %}bg-danger{% else %}bg-[#6b7280]{% endif %}"></div>
+                <span class="text-sm font-bold text-text-main">{{ sentiment_label }} ({{ "%.1f"|format(avg_score|default(0)) }})</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Category Filter -->
+    <div class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+        {% set categories = ["Semua Berita", "Emas Global", "ANTM", "MDKA", "BRMS", "PSAB"] %}
+        {% for cat in categories %}
+        <a href="/news?category={{ cat }}" class="px-5 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-colors {% if category == cat %}bg-[#d4af37] text-[#5c470a] shadow-sm{% else %}bg-surface border border-border-color text-text-muted hover:bg-gray-50{% endif %}">
+            {{ cat }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-2">
+        
+        <!-- Main News List -->
+        <div class="lg:col-span-2 flex flex-col gap-4">
+            <h2 class="text-xl font-bold text-text-main mb-2">Trending Hype</h2>
+            
+            {% if market_news is not none and not market_news.empty %}
+                {% for i, row in market_news.iterrows() %}
+                <a href="{{ row['Link'] }}" target="_blank" class="bg-surface rounded-xl border border-border-color p-5 shadow-sm hover:border-[#d4af37] transition-all group flex gap-5 items-start">
+                    <div class="w-16 h-16 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex-shrink-0 flex items-center justify-center border border-border-color group-hover:from-[#fdfaf2] group-hover:to-[#f8f2df] transition-colors">
+                        <span class="material-symbols-outlined text-gray-400 group-hover:text-[#856514] transition-colors">newspaper</span>
+                    </div>
+                    <div class="flex flex-col gap-2 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="bg-[#f3f4f6] text-text-muted px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">{{ row['Category']|default('Berita') }}</span>
+                            <span class="text-xs font-semibold text-text-muted">{{ row['Source'] }}</span>
+                        </div>
+                        <h3 class="text-lg font-bold text-text-main group-hover:text-[#b38d2e] transition-colors leading-snug">{{ row['Title'] }}</h3>
+                        <div class="text-xs text-text-muted flex items-center gap-1 mt-1">
+                            <span class="material-symbols-outlined text-[14px]">schedule</span>
+                            {{ row['Date'].strftime('%d %b %Y') if row['Date'] else 'Hari ini' }}
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+            {% else %}
+                <div class="bg-surface rounded-xl border border-border-color p-8 text-center shadow-sm">
+                    <span class="material-symbols-outlined text-4xl text-gray-300 mb-2">inbox</span>
+                    <p class="text-text-muted font-medium">Belum ada berita yang sesuai dengan kategori ini.</p>
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- Top News Sidebar -->
+        <div class="flex flex-col gap-6">
+            <div class="bg-[#fdfcf8] rounded-xl border border-[#e8dfc8] p-6 shadow-sm sticky top-24">
+                <div class="flex items-center gap-2 mb-6">
+                    <span class="material-symbols-outlined text-[#856514]">local_fire_department</span>
+                    <h3 class="text-lg font-bold text-text-main">Top Berita Hari Ini</h3>
+                </div>
+                
+                <div class="flex flex-col gap-5">
+                    {% if market_news is not none and not market_news.empty %}
+                        {% for i, row in market_news.head(4).iterrows() %}
+                        <div class="flex flex-col gap-2 pb-4 {% if not loop.last %}border-b border-border-color{% endif %}">
+                            <a href="{{ row['Link'] }}" target="_blank" class="text-sm font-bold text-text-main hover:text-[#b38d2e] transition-colors line-clamp-2 leading-relaxed">
+                                {{ row['Title'] }}
+                            </a>
+                            <span class="text-[10px] font-semibold text-text-muted uppercase tracking-wider">{{ row['Source'] }}</span>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-xs text-text-muted">Tidak ada berita top hari ini.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+    </div>
+
+</div>
+{% endblock %}

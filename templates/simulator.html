@@ -1,0 +1,485 @@
+{% extends "base.html" %}
+{% set active_page = "simulator" %}
+{% block title %}Simulator - GoldStock Insight{% endblock %}
+
+{% block content %}
+<div class="flex flex-col gap-6 max-w-7xl mx-auto pb-10">
+
+    <div class="flex justify-between items-start">
+        <div class="w-2/3">
+            <h1 class="text-3xl font-extrabold text-text-main mb-2">Simulator</h1>
+            <p class="text-text-muted text-sm leading-relaxed">Project potential portfolio growth over time based on historical data patterns and custom contribution strategies.</p>
+        </div>
+        <div>
+            <div class="border border-border-color rounded-full px-4 py-1.5 flex items-center gap-2 bg-[#fdfdfc] shadow-sm">
+                <span class="material-symbols-outlined text-[#856514] text-sm">public</span>
+                <span class="text-xs font-semibold text-text-muted tracking-wider">BASE CURRENCY: IDR</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
+        
+        <!-- Parameters Sidebar -->
+        <div class="lg:col-span-3 bg-[#fdfdfc] rounded-xl border border-border-color p-6 shadow-sm flex flex-col h-full">
+            <div class="flex items-center gap-2 mb-6">
+                <span class="material-symbols-outlined text-text-main">tune</span>
+                <h2 class="text-xl font-bold text-text-main">Parameters</h2>
+            </div>
+            
+            <div class="flex flex-col gap-5 flex-1">
+                <div>
+                    <label class="block text-xs font-bold text-text-muted uppercase tracking-widest mb-2">Target Asset Class</label>
+                    <div class="relative">
+                        <select id="asset-class" class="w-full bg-[#f9fafb] border border-border-color text-text-main rounded-lg px-4 py-3 appearance-none focus:outline-none focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37] transition-all font-semibold">
+                            <option value="ANTM" {% if selected_ticker == 'ANTM' %}selected{% endif %}>ANTM (Aneka Tambang Tbk)</option>
+                            <option value="MDKA" {% if selected_ticker == 'MDKA' %}selected{% endif %}>MDKA (Merdeka Copper Gold Tbk)</option>
+                            <option value="BRMS" {% if selected_ticker == 'BRMS' %}selected{% endif %}>BRMS (Bumi Resources Min. Tbk)</option>
+                            <option value="PSAB" {% if selected_ticker == 'PSAB' %}selected{% endif %}>PSAB (J Resources Asia Pasifik Tbk)</option>
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-text-muted">
+                            <span class="material-symbols-outlined text-[20px]">expand_more</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-semibold text-text-muted mb-2">Initial Investment</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-text-main text-sm font-semibold">Rp</span>
+                        <input type="text" id="initial-capital" value="50000000" class="w-full border border-border-color rounded-lg pl-9 pr-3 py-2 text-sm text-right font-medium focus:outline-none focus:border-primary shadow-sm">
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-semibold text-text-muted mb-2">Rentang Waktu</label>
+                    <select id="timeframe-type" class="w-full bg-[#f9fafb] border border-border-color text-text-main rounded-lg px-4 py-3 appearance-none focus:outline-none focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37] transition-all font-semibold">
+                        <option value="Panjang">Jangka Panjang</option>
+                        <option value="Pendek">Jangka Pendek</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <div class="flex justify-between mb-2">
+                        <label id="timeframe-label" class="text-xs font-semibold text-text-muted">Berapa Tahun?</label>
+                    </div>
+                    <input type="number" id="investment-period" value="5" min="1" class="w-full border border-border-color rounded-lg px-3 py-2 text-sm font-medium focus:outline-none focus:border-primary shadow-sm">
+                </div>
+
+                <div>
+                    <button id="predict-btn" class="w-full bg-[#856514] text-white px-6 py-3 rounded-lg text-sm font-semibold flex justify-center items-center gap-2 hover:bg-[#70540e] transition-colors shadow-sm">
+                        <span class="material-symbols-outlined text-lg">insights</span>
+                        Analisis Prediksi
+                    </button>
+                </div>
+                
+                <div class="bg-[#f8f9fa] rounded-lg border border-border-color p-3 mt-auto">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#6b7280]">trending_up</span>
+                        <div class="flex flex-col">
+                            <span class="text-[10px] text-text-muted">Current Price: <span id="current-price-display">Rp 0</span></span>
+                            <span class="text-sm font-bold text-text-main">Future Price: <span id="future-price-display">Rp 0</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Area -->
+        <div class="lg:col-span-9 flex flex-col gap-6" id="results-area">
+            
+            <h3 class="text-[10px] font-bold text-text-muted uppercase tracking-widest -mb-2">Investment Breakdown</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Modal -->
+                <div class="bg-surface rounded-xl border border-border-color p-4 shadow-sm flex flex-col justify-center">
+                    <span class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-1">Modal Investasi</span>
+                    <span class="text-xl font-bold text-text-main" id="display-modal">Rp 0</span>
+                </div>
+                <!-- Harga Saat Ini -->
+                <div class="bg-surface rounded-xl border border-border-color p-4 shadow-sm flex flex-col justify-center">
+                    <span class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-1">Harga Saham Saat Ini</span>
+                    <span class="text-xl font-bold text-text-main" id="display-current-price">Rp 0 / lembar</span>
+                </div>
+                <!-- Jumlah Saham -->
+                <div class="bg-surface rounded-xl border border-border-color p-4 shadow-sm flex flex-col justify-center">
+                    <span class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-1">Estimasi Jumlah Saham</span>
+                    <span class="text-xl font-bold text-text-main" id="display-shares">0 Lembar</span>
+                </div>
+            </div>
+
+            <h3 class="text-[10px] font-bold text-text-muted uppercase tracking-widest -mb-2 mt-2">Proyeksi Investasi</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Prediksi Return -->
+                <div class="bg-surface rounded-xl border border-border-color p-4 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <span class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-1">Prediksi Return (Tahunan)</span>
+                        <div class="text-xl font-bold text-[#856514]" id="display-predicted-return">0%</div>
+                    </div>
+                    <span class="text-[9px] text-text-muted mt-2">Source: ML (GRU + XGBoost)</span>
+                </div>
+                <!-- Harga Masa Depan -->
+                <div class="bg-[#fdfbf2] rounded-xl border border-[#e8dfc8] p-4 shadow-sm flex flex-col justify-center">
+                    <span class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-1" id="display-future-price-label">Estimasi Harga Masa Depan</span>
+                    <span class="text-xl font-extrabold text-[#856514]" id="display-future-price">Rp 0 / lembar</span>
+                </div>
+                <!-- Nilai Portofolio -->
+                <div class="bg-[#fdfbf2] rounded-xl border border-[#e8dfc8] p-4 shadow-sm flex flex-col justify-center relative overflow-hidden">
+                    <div class="absolute inset-0 opacity-30" style="background-image: radial-gradient(#d4af37 1px, transparent 1px); background-size: 20px 20px;"></div>
+                    <span class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-1 relative z-10">Estimasi Nilai Portofolio</span>
+                    <span class="text-xl font-extrabold text-[#856514] relative z-10" id="display-future-value">Rp 0</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Profit / Loss -->
+                <div class="bg-[#f8f9fa] rounded-xl border border-border-color p-4 shadow-sm flex flex-col justify-center">
+                    <span class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-1">Estimasi Profit / Loss</span>
+                    <span class="text-xl font-extrabold" id="display-profit">Rp 0</span>
+                </div>
+                <!-- Return Total % -->
+                <div class="bg-[#f8f9fa] rounded-xl border border-border-color p-4 shadow-sm flex flex-col justify-center">
+                    <span class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-1">Estimasi Return Total</span>
+                    <span class="text-xl font-extrabold" id="display-return-pct">0%</span>
+                </div>
+                <!-- Risk Level -->
+                <div class="bg-surface rounded-xl border border-border-color p-4 shadow-sm flex flex-col justify-center">
+                    <span class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-1">Risk Level</span>
+                    <span class="text-xl font-bold text-text-main" id="display-risk-level">Moderat</span>
+                    <span class="text-[9px] text-text-muted mt-1">Estimasi Berdasarkan Volatilitas</span>
+                </div>
+            </div>
+
+            <!-- Penjelasan Expandable -->
+            <details class="bg-surface rounded-xl border border-border-color shadow-sm mt-2 group">
+                <summary class="px-6 py-4 text-sm font-bold text-text-main cursor-pointer outline-none flex justify-between items-center list-none">
+                    <span>Bagaimana Simulasi Ini Dihitung?</span>
+                    <span class="material-symbols-outlined text-text-muted group-open:rotate-180 transition-transform">expand_more</span>
+                </summary>
+                <div class="px-6 pb-6 pt-2 text-xs text-text-main space-y-4 border-t border-border-color mt-2">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                        <div>
+                            <div class="mb-3">
+                                <span class="font-bold text-[11px] uppercase tracking-wider text-text-muted block mb-1">Harga Saham Saat Ini:</span>
+                                <div class="text-sm font-semibold" id="calc-current-price">Rp 0</div>
+                            </div>
+                            <div class="mb-3">
+                                <span class="font-bold text-[11px] uppercase tracking-wider text-text-muted block mb-1">Modal Investasi:</span>
+                                <div class="text-sm font-semibold" id="calc-modal">Rp 0</div>
+                            </div>
+                            <div class="mb-3">
+                                <span class="font-bold text-[11px] uppercase tracking-wider text-text-muted block mb-1">Jumlah Saham:</span>
+                                <div class="text-sm font-semibold" id="calc-shares">0 / 0 = 0 lembar</div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="mb-3">
+                                <span class="font-bold text-[11px] uppercase tracking-wider text-text-muted block mb-1">Prediksi Return:</span>
+                                <div class="text-sm font-semibold" id="calc-pred-return">0% per tahun</div>
+                            </div>
+                            <div class="mb-3">
+                                <span class="font-bold text-[11px] uppercase tracking-wider text-text-muted block mb-1">Estimasi Harga Masa Depan:</span>
+                                <div class="text-sm font-semibold" id="calc-future-price">0 × (1 + 0)^n = Rp 0</div>
+                            </div>
+                            <div class="mb-3">
+                                <span class="font-bold text-[11px] uppercase tracking-wider text-text-muted block mb-1">Nilai Portofolio:</span>
+                                <div class="text-sm font-semibold" id="calc-future-val">0 × 0 = Rp 0</div>
+                            </div>
+                            <div>
+                                <span class="font-bold text-[11px] uppercase tracking-wider text-text-muted block mb-1">Profit:</span>
+                                <div class="text-sm font-semibold" id="calc-profit">Rp 0 - Rp 0 = Rp 0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+
+            <!-- Chart -->
+            <div class="bg-surface rounded-xl border border-border-color p-6 shadow-sm flex-1">
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h3 class="text-xl font-bold text-text-main">Growth Trajectory</h3>
+                    </div>
+                </div>
+                <div class="relative w-full h-[300px] flex items-center justify-center text-text-muted text-sm">
+                    <canvas id="growthChart"></canvas>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const format_idr = (num) => {
+        // Prevent exponential notation, ensure it's a fixed float, then format.
+        let parsedNum = Number(num);
+        if (!isFinite(parsedNum)) parsedNum = 0;
+        
+        return new Intl.NumberFormat('id-ID', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+            useGrouping: true
+        }).format(parsedNum).replace(/\./g, ',');
+    };
+    
+    // Fallback formatCurrency using same logic to ensure consistency
+    const formatCurrency = format_idr;
+    
+    const parseCurrency = (str) => {
+        if (!str) return 0;
+        return parseInt(str.toString().replace(/,/g, '').replace(/\./g, '')) || 0;
+    };
+
+    // Inputs
+    const initialInput = document.getElementById('initial-capital');
+    const horizonInput = document.getElementById('investment-period');
+    const assetSelect = document.getElementById('asset-class');
+    const timeframeTypeSelect = document.getElementById('timeframe-type');
+    const timeframeLabel = document.getElementById('timeframe-label');
+    const predictBtn = document.getElementById('predict-btn');
+    
+    // Displays (New Grid)
+    const displayModal = document.getElementById('display-modal');
+    const displayCurrentPrice = document.getElementById('display-current-price');
+    const displayShares = document.getElementById('display-shares');
+    const displayPredictedReturn = document.getElementById('display-predicted-return');
+    const displayFuturePriceLabel = document.getElementById('display-future-price-label');
+    const displayFuturePrice = document.getElementById('display-future-price');
+    const displayFutureValue = document.getElementById('display-future-value');
+    const displayProfit = document.getElementById('display-profit');
+    const displayReturnPct = document.getElementById('display-return-pct');
+    const displayRiskLevel = document.getElementById('display-risk-level');
+    
+    // Displays (Explanation Block)
+    const calcCurrentPrice = document.getElementById('calc-current-price');
+    const calcModal = document.getElementById('calc-modal');
+    const calcShares = document.getElementById('calc-shares');
+    const calcPredReturn = document.getElementById('calc-pred-return');
+    const calcFuturePrice = document.getElementById('calc-future-price');
+    const calcFutureVal = document.getElementById('calc-future-val');
+    const calcProfit = document.getElementById('calc-profit');
+    
+    // Displays (Sidebar)
+    const currentPriceDisplaySidebar = document.getElementById('current-price-display');
+    const futurePriceDisplaySidebar = document.getElementById('future-price-display');
+    
+    // Chart instance
+    let chartInstance = null;
+    
+    // ML Backend Variables injected by Jinja (This is an Annualized Return)
+    const mlPredictedAnnualReturn = {{ predicted_return if predicted_return else 0.0 }};
+    const currentAssetPrice = {{ current_price if current_price else 1500 }};
+    
+    // Setup initial display
+    currentPriceDisplaySidebar.innerText = `Rp ${format_idr(currentAssetPrice)}`;
+    displayCurrentPrice.innerText = `Rp ${format_idr(currentAssetPrice)} / lembar`;
+
+    // Handle Rentang Waktu Change
+    timeframeTypeSelect.addEventListener('change', function() {
+        timeframeLabel.innerText = this.value === 'Panjang' ? "Berapa Tahun?" : "Berapa Bulan?";
+    });
+
+    const calculateProjection = () => {
+        const initialAmount = parseCurrency(initialInput.value) || 0;
+        const periods = parseFloat(horizonInput.value) || 0;
+        const timeframeType = timeframeTypeSelect.value;
+        
+        // Number logic...
+        const sharesBought = initialAmount / currentAssetPrice;
+        let futureAssetPrice = 0;
+        let futureValue = 0;
+        
+        if (timeframeType === 'Panjang') {
+            futureAssetPrice = currentAssetPrice * Math.pow((1 + mlPredictedAnnualReturn), periods);
+            displayFuturePriceLabel.innerText = `Estimasi Harga Masa Depan (${periods} Tahun)`;
+        } else {
+            const monthlyReturn = Math.pow((1 + mlPredictedAnnualReturn), (1/12)) - 1;
+            futureAssetPrice = currentAssetPrice * Math.pow((1 + monthlyReturn), periods);
+            displayFuturePriceLabel.innerText = `Estimasi Harga Masa Depan (${periods} Bulan)`;
+        }
+        
+        futureValue = sharesBought * futureAssetPrice;
+        const profit = futureValue - initialAmount;
+        const returnPct = ((futureValue / initialAmount) - 1) * 100;
+        
+        // --- Populate Grid UI ---
+        displayModal.innerText = `Rp ${format_idr(initialAmount)}`;
+        displayShares.innerText = `${format_idr(sharesBought)} Lembar`;
+        
+        const returnFormatted = (mlPredictedAnnualReturn * 100).toFixed(1);
+        displayPredictedReturn.innerText = returnFormatted >= 0 ? `+${returnFormatted}%` : `${returnFormatted}%`;
+        displayPredictedReturn.className = returnFormatted >= 0 ? 'text-xl font-bold text-[#166534]' : 'text-xl font-bold text-danger';
+        
+        displayFuturePrice.innerText = `Rp ${format_idr(futureAssetPrice)} / lembar`;
+        displayFutureValue.innerText = `Rp ${format_idr(futureValue)}`;
+        
+        displayProfit.innerText = profit >= 0 ? `+ Rp ${format_idr(profit)}` : `- Rp ${format_idr(Math.abs(profit))}`;
+        displayProfit.className = profit >= 0 ? 'text-xl font-extrabold text-[#166534]' : 'text-xl font-extrabold text-danger';
+        
+        displayReturnPct.innerText = returnPct >= 0 ? `+${returnPct.toFixed(1)}%` : `${returnPct.toFixed(1)}%`;
+        displayReturnPct.className = returnPct >= 0 ? 'text-xl font-extrabold text-[#166534]' : 'text-xl font-extrabold text-danger';
+        
+        futurePriceDisplaySidebar.innerText = `Rp ${format_idr(futureAssetPrice)}`;
+
+        // --- Populate Explanation Block UI ---
+        calcCurrentPrice.innerText = `Rp ${format_idr(currentAssetPrice)}`;
+        calcModal.innerText = `Rp ${format_idr(initialAmount)}`;
+        calcShares.innerText = `${format_idr(initialAmount)} / ${format_idr(currentAssetPrice)} = ${format_idr(sharesBought)} lembar`;
+        calcPredReturn.innerText = `${returnFormatted}% per tahun`;
+        
+        if (timeframeType === 'Panjang') {
+            calcFuturePrice.innerText = `${format_idr(currentAssetPrice)} × (1 + ${mlPredictedAnnualReturn.toFixed(3)})^${periods} = Rp ${format_idr(futureAssetPrice)}`;
+        } else {
+            const monthlyRetStr = (Math.pow((1 + mlPredictedAnnualReturn), (1/12)) - 1).toFixed(3);
+            calcFuturePrice.innerText = `${format_idr(currentAssetPrice)} × (1 + ${monthlyRetStr})^${periods} = Rp ${format_idr(futureAssetPrice)}`;
+        }
+        
+        calcFutureVal.innerText = `${format_idr(sharesBought)} × ${format_idr(futureAssetPrice)} = Rp ${format_idr(futureValue)}`;
+        calcProfit.innerText = `Rp ${format_idr(futureValue)} - Rp ${format_idr(initialAmount)} = Rp ${format_idr(profit)}`;
+
+            
+        updateChart(initialAmount, sharesBought, periods, timeframeType, mlPredictedAnnualReturn);
+    };
+
+    const updateChart = (initialAmount, shares, periods, timeframeType, annualRate) => {
+        const labels = [];
+        const dataPoints = [];
+        const principalData = [];
+        
+        if (timeframeType === 'Pendek') {
+            const months = periods;
+            const monthlyReturn = Math.pow((1 + annualRate), (1/12)) - 1;
+            
+            for (let m = 0; m <= months; m++) {
+                labels.push(`Bulan ${m}`);
+                const priceAtM = currentAssetPrice * Math.pow((1 + monthlyReturn), m);
+                const valueAtM = shares * priceAtM;
+                dataPoints.push(valueAtM);
+                principalData.push(initialAmount);
+            }
+        } else {
+            const years = periods;
+            for (let y = 0; y <= years; y++) {
+                labels.push(`Tahun ${y}`);
+                const priceAtY = currentAssetPrice * Math.pow((1 + annualRate), y);
+                const valueAtY = shares * priceAtY;
+                dataPoints.push(valueAtY);
+                principalData.push(initialAmount);
+            }
+        }
+
+        const ctx = document.getElementById('growthChart').getContext('2d');
+        if (chartInstance) chartInstance.destroy();
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Nilai Portofolio',
+                        data: dataPoints,
+                        borderColor: '#d4af37',
+                        backgroundColor: 'rgba(212, 175, 55, 0.1)',
+                        borderWidth: 3,
+                        pointBackgroundColor: '#ffffff',
+                        pointBorderColor: '#d4af37',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        fill: true,
+                        tension: 0.3
+                    },
+                    {
+                        label: 'Modal Awal',
+                        data: principalData,
+                        borderColor: '#94a3b8',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0.3
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        backgroundColor: 'rgba(31, 41, 55, 0.9)',
+                        titleFont: { size: 13, family: 'Inter' },
+                        bodyFont: { size: 12, family: 'Inter' },
+                        padding: 10,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += 'Rp ' + format_idr(context.parsed.y);
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                if(value >= 1000000000) return (value / 1000000000) + ' Miliar';
+                                if(value >= 1000000) return (value / 1000000) + ' Juta';
+                                return format_idr(value);
+                            },
+                            font: { family: 'Inter', size: 10 },
+                            color: '#9ca3af'
+                        },
+                        grid: {
+                            color: '#f3f4f6',
+                            drawBorder: false
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            font: { family: 'Inter', size: 11 },
+                            color: '#6b7280'
+                        },
+                        grid: {
+                            display: false,
+                            drawBorder: false
+                        }
+                    }
+                }
+            }
+        });
+    };
+
+    // Event Listeners
+    initialInput.addEventListener('input', function(e) {
+        const val = this.value.replace(/\./g, '').replace(/,/g, '');
+        if (val && !isNaN(val)) {
+            // Reformat while typing using our locale formatting
+            this.value = new Intl.NumberFormat('id-ID').format(val);
+        }
+    });
+    
+    predictBtn.addEventListener('click', calculateProjection);
+    
+    assetSelect.addEventListener('change', function() {
+        window.location.href = `/simulator?ticker=${this.value}`;
+    });
+    
+    // Initial format
+    initialInput.value = new Intl.NumberFormat('id-ID').format(parseCurrency(initialInput.value));
+});
+</script>
+{% endblock %}

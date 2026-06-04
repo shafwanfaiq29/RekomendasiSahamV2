@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% set active_page = "dashboard" %}
+{% block title %}Dashboard - GoldStock Insight{% endblock %}
+
+{% block content %}
+<div class="flex flex-col gap-6 max-w-7xl mx-auto pb-10">
+
+    <!-- Top Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Top Recommendation -->
+        <div class="lg:col-span-2 bg-[#fdfcf8] rounded-xl border border-[#e8dfc8] p-6 flex flex-col justify-between">
+            <div class="flex items-center gap-2 mb-6">
+                <span class="material-symbols-outlined text-[#16a34a]">star_border</span>
+                <h2 class="text-xl font-bold text-text-main">Top Stock Recommendation of the Day</h2>
+            </div>
+            
+            {% if top_pick %}
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center">
+                <div>
+                    <div class="flex items-baseline gap-3 mb-2">
+                        <span class="text-4xl font-extrabold text-text-main">{{ top_pick.Ticker }}</span>
+                        <span class="text-text-muted">{{ top_pick['Company Name'] }}</span>
+                    </div>
+                    <div class="flex items-center gap-4 mt-4">
+                        <span class="bg-[#dcfce7] text-[#166534] px-4 py-1.5 rounded-full text-sm font-bold tracking-wide uppercase">{{ top_pick.Recommendation }}</span>
+                        <div class="flex items-center gap-1 text-[#16a34a] font-medium">
+                            <span class="material-symbols-outlined text-sm">trending_up</span>
+                            <span>+{{ "%.2f"|format(top_pick['Predicted Return']*100) }}% ({{ "{:,.0f}".format(top_pick['Close Price']) }} IDR)</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-6 md:mt-0 md:w-64">
+                    <div class="flex justify-between py-2 border-b border-border-color">
+                        <span class="text-sm text-text-muted">P/E Ratio</span>
+                        <span class="text-sm font-medium">{{ "%.1f"|format(top_pick['PE Ratio']|default(15.2)) }}x</span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b border-border-color">
+                        <span class="text-sm text-text-muted">Target Price</span>
+                        {% set target_price = top_pick['Close Price'] * (1 + (top_pick['Predicted Return'] if top_pick['Predicted Return'] > 0 else 0.1)) %}
+                        <span class="text-sm font-medium">{{ "{:,.0f}".format(target_price) }} IDR</span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b border-border-color">
+                        <span class="text-sm text-text-muted">Upside</span>
+                        <span class="text-sm font-medium text-[#16a34a]">+{{ "%.1f"|format(top_pick['Predicted Return']*100) }}%</span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b border-border-color">
+                        <span class="text-sm text-text-muted">Score</span>
+                        <span class="text-sm font-medium">{{ "%.1f"|format(top_pick['Overall Score']) }}</span>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <p>Data rekomendasi belum tersedia hari ini.</p>
+            {% endif %}
+        </div>
+        
+        <!-- System Overview -->
+        <div class="bg-[#fcfaf7] rounded-xl border border-[#edebe6] p-6 flex flex-col justify-between">
+            <div>
+                <h3 class="text-lg font-bold text-text-main mb-3">System Overview</h3>
+                <p class="text-sm text-text-muted leading-relaxed">
+                    GoldStock Insight aggregates global gold spot prices, market sentiment, and regional stock data to provide actionable investment recommendations and portfolio simulation tools.
+                </p>
+            </div>
+            <a href="#" class="text-[#b38d2e] text-sm font-medium flex items-center gap-1 mt-4 hover:underline">
+                Learn more <span class="material-symbols-outlined text-sm">arrow_forward</span>
+            </a>
+        </div>
+        
+    </div>
+
+    <!-- Middle Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Top Trending News -->
+        <div class="lg:col-span-2 bg-surface rounded-xl border border-border-color p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-text-main">Top Trending News</h3>
+                <a href="#" class="text-[#b38d2e] text-sm font-bold hover:underline uppercase">View All</a>
+            </div>
+            
+            <div class="flex flex-col gap-6">
+                {% if market_news is not none and not market_news.empty %}
+                    {% for i, row in market_news.head(2).iterrows() %}
+                    <div class="flex gap-4 items-center">
+                        <div class="w-24 h-16 rounded bg-gradient-to-br from-cyan-700 to-blue-900 flex-shrink-0 flex items-center justify-center shadow-inner overflow-hidden relative">
+                            <div class="absolute inset-0 bg-black/20"></div>
+                            <span class="text-white/60 text-[10px] uppercase font-bold absolute tracking-widest z-10">News</span>
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <a href="{{ row['Link'] }}" target="_blank" class="font-bold text-text-main hover:text-primary transition-colors text-sm leading-snug">{{ row['Title'] }}</a>
+                            <div class="flex items-center gap-2 text-xs text-text-muted mt-1">
+                                <span>{{ row['Date'].strftime('%d %b %Y') if row['Date'] else 'Recent' }}</span>
+                                <span>•</span>
+                                <span>{{ row['Source'] }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-sm text-text-muted">Belum ada berita terbaru hari ini.</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Market Sentiment -->
+        <div class="bg-surface rounded-xl border border-border-color p-6 relative flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-text-main">Market Sentiment</h3>
+                <span class="material-symbols-outlined text-text-muted text-lg">info</span>
+            </div>
+            
+            <div class="flex-1 flex flex-col items-center justify-center relative mt-4">
+                <svg class="w-full max-w-[220px] overflow-visible" viewBox="0 0 100 50">
+                    <!-- Background Arc -->
+                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#f3f4f6" stroke-linecap="round" stroke-width="12"></path>
+                    <!-- Value Arc (Primary Gold) -->
+                    {% set score = (market_avg_score * 100) if market_avg_score else 50 %}
+                    <!-- Math logic for arc dashoffset -->
+                    {% set dashoffset = 251 - (score / 100 * 251) %}
+                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#d4af37" stroke-linecap="round" stroke-width="12" style="stroke-dasharray: 251; stroke-dashoffset: {{ dashoffset }};"></path>
+                </svg>
+                
+                <div class="absolute bottom-0 left-0 right-0 flex flex-col items-center">
+                    <span class="text-4xl font-bold text-text-main">{{ "%.0f"|format(score) }}</span>
+                    <span class="text-[10px] font-bold text-text-muted uppercase tracking-widest mt-1">{{ market_label if market_label else "Neutral" }}</span>
+                </div>
+            </div>
+            
+            <div class="flex justify-between text-xs text-text-muted mt-6 px-4">
+                <span>Fear</span>
+                <span>Greed</span>
+            </div>
+        </div>
+        
+    </div>
+
+    <!-- Regional Watchlist -->
+    <div class="bg-surface rounded-xl border border-border-color overflow-hidden">
+        <div class="p-6 border-b border-border-color flex justify-between items-center bg-[#fdfdfc]">
+            <h3 class="text-xl font-bold text-text-main">Regional Watchlist</h3>
+            <a href="#" class="text-[#b38d2e] text-sm font-bold hover:underline uppercase">View All</a>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="border-b border-border-color">
+                        <th class="px-6 py-4 text-xs font-semibold text-text-muted uppercase tracking-wider">Ticker</th>
+                        <th class="px-6 py-4 text-xs font-semibold text-text-muted uppercase tracking-wider">Company</th>
+                        <th class="px-6 py-4 text-xs font-semibold text-text-muted uppercase tracking-wider text-right">Price (IDR)</th>
+                        <th class="px-6 py-4 text-xs font-semibold text-text-muted uppercase tracking-wider text-right">24h Change</th>
+                        <th class="px-6 py-4 text-xs font-semibold text-text-muted uppercase tracking-wider text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-border-color text-sm text-text-main">
+                    {% for _, row in watchlist.iterrows() %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 font-bold bg-[#f3f4f6] mx-2 my-2 rounded m-2 inline-block ml-6 text-xs text-text-main">{{ row['Ticker'] }}</td>
+                        <td class="px-6 py-4 text-text-muted">{{ row['Company Name'] }}</td>
+                        <td class="px-6 py-4 text-right">{{ "{:,.0f}".format(row['Close Price']) }}</td>
+                        <td class="px-6 py-4 text-right {% if row['Daily Return'] > 0 %}text-success{% else %}text-danger{% endif %} font-medium">
+                            {% if row['Daily Return'] > 0 %}+{% endif %}{{ "%.2f"|format(row['Daily Return']*100) }}%
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <a href="/detail?ticker={{ row['Ticker'] }}" class="inline-block px-4 py-1.5 border border-border-color rounded hover:bg-gray-100 transition-colors text-text-main">Analyze</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Quick Access -->
+    <div>
+        <h3 class="text-lg font-bold text-text-main mb-4">Quick Access</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <a href="/detail" class="bg-surface border border-border-color p-4 rounded-xl flex items-center gap-4 hover:shadow-premium transition-all group cursor-pointer">
+                <div class="w-10 h-10 rounded-full bg-[#eef2ff] text-[#6366f1] flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <span class="material-symbols-outlined text-lg">monitoring</span>
+                </div>
+                <span class="font-medium text-sm text-text-main">Stock Detail</span>
+            </a>
+            <a href="/simulator" class="bg-surface border border-border-color p-4 rounded-xl flex items-center gap-4 hover:shadow-premium transition-all group cursor-pointer">
+                <div class="w-10 h-10 rounded-full bg-[#f3e8ff] text-[#9333ea] flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <span class="material-symbols-outlined text-lg">calculate</span>
+                </div>
+                <span class="font-medium text-sm text-text-main">Return Simulator</span>
+            </a>
+            <a href="/compare" class="bg-surface border border-border-color p-4 rounded-xl flex items-center gap-4 hover:shadow-premium transition-all group cursor-pointer">
+                <div class="w-10 h-10 rounded-full bg-[#e0e7ff] text-[#4f46e5] flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <span class="material-symbols-outlined text-lg">compare_arrows</span>
+                </div>
+                <span class="font-medium text-sm text-text-main">Compare Stocks</span>
+            </a>
+            <a href="/analysis" class="bg-surface border border-border-color p-4 rounded-xl flex items-center gap-4 hover:shadow-premium transition-all group cursor-pointer">
+                <div class="w-10 h-10 rounded-full bg-[#eff6ff] text-[#3b82f6] flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <span class="material-symbols-outlined text-lg">lightbulb</span>
+                </div>
+                <span class="font-medium text-sm text-text-main">Recommendations</span>
+            </a>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

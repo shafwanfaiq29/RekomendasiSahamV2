@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% set active_page = "analysis" %}
+{% block title %}Mesin Rekomendasi - GoldStock Insight{% endblock %}
+
+{% block content %}
+<div class="flex flex-col gap-6 max-w-5xl mx-auto pb-10">
+
+    <div>
+        <h1 class="text-3xl font-extrabold text-text-main mb-2">Mesin Rekomendasi</h1>
+        <p class="text-text-muted">Analisis prediktif berbasis Machine Learning untuk emiten emas.</p>
+    </div>
+
+    <!-- Parameter Analisis -->
+    <div class="bg-surface rounded-xl border border-border-color p-6 mt-2 shadow-sm">
+        <h2 class="text-lg font-bold text-text-main mb-4">Parameter Analisis</h2>
+        <form method="POST" action="/analysis" class="flex flex-col md:flex-row gap-6 items-end">
+            <div class="flex-1 w-full">
+                <label class="block text-xs font-semibold text-text-muted mb-2">Pilih Emiten</label>
+                <select name="ticker" class="w-full border border-border-color rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary">
+                    {% for ticker_name, _ in ticker_map.items() %}
+                        <option value="{{ ticker_name }}" {% if selected_ticker == ticker_name %}selected{% endif %}>{{ ticker_name }} - {{ company_names.get(ticker_name, '') }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex-1 w-full">
+                <label class="block text-xs font-semibold text-text-muted mb-2">Horizon Investasi</label>
+                <select name="goal" class="w-full border border-border-color rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary">
+                    <option value="Jangka Pendek" {% if selected_goal == 'Jangka Pendek' %}selected{% endif %}>Jangka Pendek</option>
+                    <option value="Jangka Panjang" {% if selected_goal == 'Jangka Panjang' %}selected{% endif %}>Jangka Panjang</option>
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="bg-[#856514] text-white px-6 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-[#70540e] transition-colors shadow-sm">
+                    <span class="material-symbols-outlined text-lg">play_arrow</span>
+                    Analisis
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {% if recommendation %}
+    <!-- Results Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Keputusan Mesin -->
+        <div class="lg:col-span-2 bg-[#fdfdfc] rounded-xl border border-border-color p-8 relative overflow-hidden shadow-sm">
+            <h3 class="text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Hasil Rekomendasi</h3>
+            <div class="text-4xl font-extrabold {% if 'Jangka' in recommendation or 'BUY' in recommendation|upper %}text-[#166534]{% else %}text-danger{% endif %} mb-4 tracking-tight">
+                {% if 'Jangka' in recommendation %}
+                STRONG BUY
+                {% else %}
+                {{ recommendation|upper }}
+                {% endif %}
+            </div>
+            
+            <p class="text-sm text-text-main leading-relaxed w-3/4 mb-8">
+                {{ explanation }}
+            </p>
+            
+            <div class="flex items-center gap-4">
+                <div class="bg-[#f3f4f6] px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2">
+                    <span class="text-text-muted">Target Harga:</span>
+                    <span class="text-[#856514]">Rp {{ "{:,.0f}".format(latest_row['Close'] * (1 + (predicted_return if predicted_return > 0 else 0.1))) }}</span>
+                </div>
+                <div class="bg-[#f3f4f6] px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2">
+                    <span class="text-text-muted">Stop Loss:</span>
+                    <span class="text-danger">Rp {{ "{:,.0f}".format(latest_row['Close'] * 0.95) }}</span>
+                </div>
+            </div>
+            
+            <!-- Donut Chart -->
+            <div class="absolute right-8 top-1/2 -translate-y-1/2 flex items-center justify-center">
+                {% set fuzzy_score = overall_score if overall_score else 88 %}
+                <div class="w-32 h-32 rounded-full relative flex items-center justify-center" 
+                     style="background: conic-gradient(#856514 {{ fuzzy_score }}%, #e5e7eb 0);">
+                    <div class="w-28 h-28 bg-[#fdfdfc] rounded-full flex flex-col items-center justify-center absolute">
+                        <span class="text-2xl font-bold text-text-main">{{ "%.0f"|format(fuzzy_score) }}%</span>
+                        <span class="text-[9px] font-bold text-text-muted uppercase tracking-wider">Konfidensi</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side Stats -->
+        <div class="flex flex-col gap-4">
+            <!-- Sentiment Score -->
+            <div class="bg-surface rounded-xl border border-border-color p-4 shadow-sm relative group">
+                <div class="flex items-center justify-between mb-2">
+                    <div>
+                        <h4 class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-1">Sentiment Score</h4>
+                        <span class="text-xl font-bold {% if avg_score > 0 %}text-[#166534]{% else %}text-danger{% endif %}">{{ sentiment_label if sentiment_label else "Netral" }} ({{ "%.2f"|format(avg_score|float) }})</span>
+                    </div>
+                    <div class="w-10 h-10 rounded-full bg-[#dcfce7] text-[#166534] flex items-center justify-center">
+                        <span class="material-symbols-outlined">sentiment_very_satisfied</span>
+                    </div>
+                </div>
+                <p class="text-[10px] text-text-muted">Mengukur emosi pasar melalui berita terkini. Skor positif berarti optimis, negatif berarti pesimis.</p>
+            </div>
+            
+            <!-- ML Prediction -->
+            <div class="bg-surface rounded-xl border border-border-color p-4 shadow-sm relative group">
+                <div class="flex items-center justify-between mb-2">
+                    <div>
+                        <h4 class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-1">ML Prediction</h4>
+                        <span class="text-xl font-bold text-[#856514]">{% if (predicted_return|float) > 0 %}Bullish{% else %}Bearish{% endif %}</span>
+                    </div>
+                    <div class="w-10 h-10 rounded-full bg-[#fef3c7] text-[#856514] flex items-center justify-center">
+                        <span class="material-symbols-outlined">trending_up</span>
+                    </div>
+                </div>
+                <p class="text-[10px] text-text-muted">Hasil ramalan algoritma Machine Learning. Bullish memprediksi harga akan naik, Bearish turun.</p>
+            </div>
+            
+            <!-- Fundamental Index -->
+            <div class="bg-surface rounded-xl border border-border-color p-4 shadow-sm relative group">
+                <div class="flex items-center justify-between mb-2">
+                    <div>
+                        <h4 class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-1">Fundamental Index</h4>
+                        <span class="text-xl font-bold text-text-main">{{ "%.1f"|format(fundamental_score|float) if fundamental_score else '7.4' }} / 10</span>
+                    </div>
+                    <div class="w-10 h-10 rounded-full bg-gray-100 text-text-muted flex items-center justify-center">
+                        <span class="material-symbols-outlined">account_balance</span>
+                    </div>
+                </div>
+                <p class="text-[10px] text-text-muted">Kesehatan finansial emiten. Skor tinggi menandakan fundamental perusahaan sangat stabil.</p>
+            </div>
+        </div>
+        
+    </div>
+
+    <!-- Logika Mesin -->
+    <div class="bg-surface rounded-xl border border-border-color p-6 mt-2 shadow-sm">
+        <h3 class="text-lg font-bold text-text-main mb-6">Logika Mesin (Konvergensi Data)</h3>
+        <div class="flex flex-col md:flex-row gap-10 items-center">
+            
+            <!-- Bar Chart (CSS based) -->
+            <div class="flex items-end gap-4 h-48 pl-2 pb-4">
+                {% set ml_h = (80 if (predicted_return|float) > 0 else 30) %}
+                {% set sent_h = 60 %}
+                {% set fund_h = (fundamental_score|float * 10) if fundamental_score else 74 %}
+                
+                <div class="flex flex-col items-center gap-2 justify-end h-full w-20">
+                    <div class="w-12 bg-[#856514] rounded-t-sm" style="height: {{ ml_h }}%;"></div>
+                    <span class="text-[10px] font-bold text-text-muted text-center leading-tight">Machine<br/>Learning</span>
+                </div>
+                <div class="flex flex-col items-center gap-2 justify-end h-full w-20">
+                    <div class="w-12 bg-[#047857] rounded-t-sm" style="height: {{ sent_h }}%;"></div>
+                    <span class="text-[10px] font-bold text-text-muted text-center leading-tight">Sentimen<br/>Berita</span>
+                </div>
+                <div class="flex flex-col items-center gap-2 justify-end h-full w-20">
+                    <div class="w-12 bg-[#4b5563] rounded-t-sm" style="height: {{ fund_h }}%;"></div>
+                    <span class="text-[10px] font-bold text-text-muted text-center leading-tight">Faktor<br/>Fundamental</span>
+                </div>
+            </div>
+            
+            <!-- Text Legend -->
+            <div class="flex-1 ml-4 md:ml-12 border-l border-border-color pl-8">
+                <p class="text-sm text-text-main leading-relaxed mb-6">
+                    Rekomendasi ini dihasilkan dari irisan tiga model analisis utama. Konvergensi tertinggi ditemukan pada indikator fundamental yang solid didukung oleh pola teknikal ML yang mengidentifikasi fase akumulasi.
+                </p>
+                <div class="flex flex-col gap-3">
+                    <div class="flex items-start gap-4">
+                        <div class="w-2 h-2 rounded-full bg-[#856514] mt-1.5"></div>
+                        <div class="flex-1 flex gap-4 text-xs">
+                            <span class="font-bold w-20">ML Model:</span>
+                            <span class="text-text-muted">Mendeteksi pola breakout historis.</span>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4">
+                        <div class="w-2 h-2 rounded-full bg-[#047857] mt-1.5"></div>
+                        <div class="flex-1 flex gap-4 text-xs">
+                            <span class="font-bold w-20">Sentimen:</span>
+                            <span class="text-text-muted">Peningkatan volume pencarian positif.</span>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4">
+                        <div class="w-2 h-2 rounded-full bg-[#4b5563] mt-1.5"></div>
+                        <div class="flex-1 flex gap-4 text-xs">
+                            <span class="font-bold w-20">Fundamental:</span>
+                            <span class="text-text-muted">Peningkatan margin laba kotor.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+        <!-- Faktor Risiko -->
+        <div class="bg-[#fef2f2] rounded-xl border border-[#fca5a5] p-6 shadow-sm">
+            <div class="flex items-center gap-2 mb-4 text-danger">
+                <span class="material-symbols-outlined text-xl">warning</span>
+                <h3 class="text-sm font-bold">Faktor Risiko</h3>
+            </div>
+            <ul class="list-disc pl-5 text-xs text-text-main leading-relaxed space-y-2">
+                <li>Volatilitas harga emas global dapat mempengaruhi margin secara tiba-tiba.</li>
+                <li>Perubahan regulasi ekspor mineral mentah.</li>
+                <li>Fluktuasi nilai tukar Rupiah terhadap Dolar AS.</li>
+            </ul>
+        </div>
+        
+        <!-- Aturan yang Terpicu -->
+        <div class="bg-surface rounded-xl border border-border-color p-6 shadow-sm">
+            <div class="flex items-center gap-2 mb-4 text-text-main">
+                <span class="material-symbols-outlined text-xl">tune</span>
+                <h3 class="text-sm font-bold">Aturan yang Terpicu</h3>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <span class="bg-[#f3f4f6] text-text-main border border-border-color px-3 py-1.5 rounded text-[10px] font-semibold tracking-wide">{{ hype_reason if hype_reason else "Volume normal" }}</span>
+                <span class="bg-[#f3f4f6] text-text-main border border-border-color px-3 py-1.5 rounded text-[10px] font-semibold tracking-wide">{{ risk_reason if risk_reason else "Risiko terkontrol" }}</span>
+            </div>
+        </div>
+    </div>
+    
+    {% endif %}
+
+</div>
+{% endblock %}

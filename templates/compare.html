@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% set active_page = "compare" %}
+{% block title %}Compare Stocks - GoldStock Insight{% endblock %}
+
+{% block content %}
+<div class="flex flex-col gap-6 max-w-7xl mx-auto pb-10">
+
+    <div class="flex justify-between items-start">
+        <div class="w-2/3">
+            <h1 class="text-3xl font-extrabold text-text-main mb-2">Compare Stocks</h1>
+            <p class="text-text-muted text-sm leading-relaxed">Analyze and contrast key performance metrics, machine learning projections, and risk exposures for top Indonesian gold mining equities.</p>
+        </div>
+
+    </div>
+
+    <!-- Stock Cards Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
+        
+        {% for idx, row in watchlist.iterrows() %}
+        {% set is_highest = (idx == 0) %}
+        {% set ticker = row['Ticker'] %}
+        {% set company = row['Company Name'] %}
+        {% set price = row['Close Price'] %}
+        {% set return_val = row['Daily Return'] %}
+        {% set pred = row['Predicted Return'] * 100 %}
+        {% set risk = row['Risk Level'] %}
+        {% set sent_score = row['Sentiment Score'] * 100 %}
+        
+        <!-- Stock Card -->
+        <div class="bg-surface rounded-xl border border-border-color p-6 shadow-sm flex flex-col relative {% if is_highest %}pt-10{% endif %}">
+            {% if is_highest %}
+            <div class="absolute top-0 left-1/2 -translate-x-1/2 bg-[#856514] text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-b-md">
+                HIGHEST GROWTH
+            </div>
+            {% endif %}
+            
+            <div class="flex justify-between items-start mb-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 {% if is_highest %}bg-[#fdfaf2] text-[#856514]{% else %}bg-[#f9fafb] text-[#6b7280]{% endif %} font-bold text-xl rounded-lg flex items-center justify-center">{{ ticker[0] }}</div>
+                    <div>
+                        <h2 class="text-2xl font-extrabold text-text-main">{{ ticker }}</h2>
+                        <p class="text-xs text-text-muted">{{ company }}</p>
+                    </div>
+                </div>
+                <button class="text-text-muted hover:text-text-main">
+                    <span class="material-symbols-outlined">more_vert</span>
+                </button>
+            </div>
+            
+            <div class="mb-6">
+                <div class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-1">CURRENT PRICE</div>
+                <div class="flex items-baseline gap-2">
+                    <span class="text-2xl font-bold text-text-main">Rp {{ "{:,.0f}".format(price) }}</span>
+                    <span class="text-sm font-semibold {% if return_val > 0 %}text-[#166534]{% elif return_val < 0 %}text-danger{% else %}text-text-muted{% endif %} flex items-center">
+                        {% if return_val > 0 %}<span class="material-symbols-outlined text-[14px]">arrow_upward</span>
+                        {% elif return_val < 0 %}<span class="material-symbols-outlined text-[14px]">arrow_downward</span>
+                        {% else %}<span class="material-symbols-outlined text-[14px]">remove</span>{% endif %}
+                        {{ "%.1f"|format((return_val * 100)|abs) }}%
+                    </span>
+                </div>
+            </div>
+            
+            <div class="bg-[#fdfdfc] rounded-lg border border-border-color p-5 mb-6 relative overflow-hidden">
+                <div class="absolute right-0 top-0 w-32 h-32 bg-[#d4af37] opacity-[0.08] rounded-bl-full"></div>
+                <div class="flex items-center gap-1 mb-2">
+                    <span class="material-symbols-outlined text-[#856514] text-[14px]">psychology</span>
+                    <h4 class="text-[10px] font-bold text-[#856514] uppercase tracking-widest">ML PROJECTION (1Y)</h4>
+                </div>
+                <div class="text-3xl font-extrabold text-[#856514] mb-3">{% if pred > 0 %}+{% endif %}{{ "%.1f"|format(pred) }}%</div>
+                <p class="text-xs text-text-main leading-relaxed">{{ row['Recommendation'] }}</p>
+            </div>
+            
+            <div class="flex justify-between gap-4 mb-8">
+                <div class="flex-1">
+                    <h4 class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-2">RISK EXPOSURE</h4>
+                    {% if risk == 'High Risk' %}
+                    <span class="border border-[#fca5a5] bg-[#fef2f2] text-danger px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-max">
+                        <div class="w-1.5 h-1.5 bg-danger rounded-full"></div>
+                        High
+                    </span>
+                    {% elif risk == 'Low Risk' %}
+                    <span class="border border-[#bbf7d0] bg-[#f0fdf4] text-[#166534] px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-max">
+                        <div class="w-1.5 h-1.5 bg-[#166534] rounded-full"></div>
+                        Low
+                    </span>
+                    {% else %}
+                    <span class="border border-[#fcd34d] bg-[#fffbeb] text-[#d97706] px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 w-max">
+                        <div class="w-1.5 h-1.5 bg-[#d97706] rounded-full"></div>
+                        Moderate
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="flex-1">
+                    <h4 class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-2">SENTIMENT SCORE</h4>
+                    <div class="flex flex-col gap-1">
+                        {% set abs_sent = (sent_score)|abs %}
+                        <span class="text-sm font-bold text-text-main">{{ "%.0f"|format(abs_sent) }}<span class="text-[10px] font-normal text-text-muted">/100</span></span>
+                        <div class="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden flex">
+                            <div class="{% if sent_score > 0 %}bg-[#16a34a]{% elif sent_score < 0 %}bg-danger{% else %}bg-[#4b5563]{% endif %} h-full rounded-full" style="width: {{ abs_sent if abs_sent <= 100 else 100 }}%;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <a href="/detail?ticker={{ ticker }}" class="mt-auto w-full {% if is_highest %}bg-[#d4af37] hover:bg-[#c29c2a] text-[#5c470a]{% else %}bg-white border border-border-color hover:bg-gray-50 text-text-main{% endif %} py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors">
+                <span class="material-symbols-outlined text-[18px]">bar_chart</span>
+                Analyze {{ ticker }}
+            </a>
+        </div>
+        {% endfor %}
+        
+    </div>
+
+</div>
+{% endblock %}

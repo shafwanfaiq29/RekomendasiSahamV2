@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>{% block title %}GoldStock Insight{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'background': '#f8f9fa',
+              'surface': '#ffffff',
+              'primary': '#cba135', /* Gold color from screenshot */
+              'primary-dark': '#b38d2e',
+              'primary-light': '#f3ead1',
+              'text-main': '#1f2937',
+              'text-muted': '#6b7280',
+              'success': '#22c55e',
+              'success-bg': '#dcfce7',
+              'danger': '#ef4444',
+              'danger-bg': '#fee2e2',
+              'border-color': '#e5e7eb',
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            boxShadow: {
+              'premium': '0 2px 10px rgba(0, 0, 0, 0.03)',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #f8f9fa;
+        color: #1f2937;
+      }
+      /* Hide scrollbar for clean look */
+      ::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+          background: transparent; 
+      }
+      ::-webkit-scrollbar-thumb {
+          background: #e5e7eb; 
+          border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+          background: #d1d5db; 
+      }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body class="antialiased flex min-h-screen">
+
+<!-- Sidebar -->
+<aside class="fixed left-0 top-0 h-screen w-64 bg-[#fafafa] border-r border-border-color flex flex-col z-40">
+    <!-- Logo Area -->
+    <div class="px-6 py-8">
+        <div class="flex items-center gap-2 mb-1">
+            <h1 class="font-bold text-xl leading-tight text-[#6b5514]">GoldStock<br/>Insight</h1>
+        </div>
+        <p class="text-[10px] uppercase font-semibold text-text-muted tracking-wider mt-2">Premium Investment<br/>Support</p>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="flex-1 px-4 flex flex-col gap-1 overflow-y-auto">
+        <a href="/" class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors {% if active_page == 'dashboard' %}bg-[#d4b045] text-[#5c470a] shadow-sm{% else %}text-text-main hover:bg-gray-100{% endif %}">
+            <span class="material-symbols-outlined text-lg">grid_view</span>
+            Dashboard
+        </a>
+        <a href="/analysis" class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors {% if active_page == 'analysis' %}bg-[#d4b045] text-[#5c470a] shadow-sm{% else %}text-text-main hover:bg-gray-100{% endif %}">
+            <span class="material-symbols-outlined text-lg">star</span>
+            Recommendations
+        </a>
+        <a href="/news" class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors {% if active_page == 'news' %}bg-[#d4b045] text-[#5c470a] shadow-sm{% else %}text-text-main hover:bg-gray-100{% endif %}">
+            <span class="material-symbols-outlined text-lg">article</span>
+            Market News
+        </a>
+        <a href="/simulator" class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors {% if active_page == 'simulator' %}bg-[#fcf8ed] text-[#8c6b12] border-r-4 border-[#d4b045]{% else %}text-text-main hover:bg-gray-100{% endif %}">
+            <span class="material-symbols-outlined text-lg">timeline</span>
+            Return Simulator
+        </a>
+        <a href="/compare" class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors {% if active_page == 'compare' %}bg-[#d4b045] text-[#5c470a] shadow-sm{% else %}text-text-main hover:bg-gray-100{% endif %}">
+            <span class="material-symbols-outlined text-lg">compare_arrows</span>
+            Compare Stocks
+        </a>
+    </nav>
+
+    <!-- User Profile Footer Removed -->
+</aside>
+
+<!-- Main Content -->
+<div class="flex-1 ml-64 flex flex-col min-h-screen">
+    <!-- Header Removed -->
+
+    <!-- Page Content -->
+    <main class="flex-1 p-8 pt-16">
+        {% block content %}{% endblock %}
+    </main>
+</div>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>
