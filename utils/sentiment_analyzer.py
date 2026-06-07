@@ -15,6 +15,15 @@ def load_indobert():
     )
 
 def bersihkan_teks(teks):
+    """
+    Preprocessing persis 100% kayak di pemodelan_nlp.ipynb.
+    
+    PENTING:
+    - Lowercase dulu SEBELUM regex lainnya (IndoBERT sensitif kapital)
+    - Pakai [^\w\s] bukan [^a-z\s] → angka tetap dipertahankan
+      (angka penting buat konteks saham, e.g. "naik 20%")
+    - Urutan operasi harus identik dengan notebook
+    """
     teks = str(teks).lower()
     teks = re.sub(r'http\S+|www\S+|https\S+', '', teks, flags=re.MULTILINE)
     teks = re.sub(r'\@\w+|\#\w+', '', teks)
@@ -24,6 +33,9 @@ def bersihkan_teks(teks):
     return teks
 
 def apply_sentiment(news_df):
+    """
+    Eksekusi NLP + Hybrid Lexicon + Agregasi Normalisasi Absolut buat Saham Individual
+    """
     if news_df.empty:
         return news_df, 0.0, "Neutral", 0
 
@@ -111,6 +123,9 @@ def apply_sentiment(news_df):
     return news_df, skor_final, label_final, len(news_df)
 
 def apply_market_sentiment(news_df):
+    """
+    Eksekusi NLP + Hybrid Lexicon + Agregasi Normalisasi Absolut buat Market News Global
+    """
     if news_df.empty:
         return news_df, 0.0, "Neutral Market"
 

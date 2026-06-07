@@ -15,7 +15,7 @@ class DummyST:
 st = DummyST()
 
 def eksekusi_fuzzy_mamdani(prediksi_return, skor_sentimen, skor_fundamental):
-    universe_1 = np.arange(-10.01, 10.02, 0.01)
+    universe_1 = np.arange(-0.11, 0.12, 0.001)
     universe_2 = np.arange(-1.01, 1.02, 0.01)
     
     in_return = ctrl.Antecedent(universe_1, 'return_ai')
@@ -39,13 +39,16 @@ def eksekusi_fuzzy_mamdani(prediksi_return, skor_sentimen, skor_fundamental):
     out_keputusan['jangka_pendek'] = fuzz.trimf(out_keputusan.universe, [35, 50, 65])
     out_keputusan['jangka_panjang'] = fuzz.trimf(out_keputusan.universe, [55, 100, 100])
     
+    # Complete rules matrix
     r1 = ctrl.Rule(in_fund['sakit'], out_keputusan['hindari'])
     r2 = ctrl.Rule(in_sentimen['negatif'], out_keputusan['hindari'])
     r3 = ctrl.Rule(in_return['bearish'] & in_fund['biasa'], out_keputusan['hindari'])
+    
     r4 = ctrl.Rule(in_return['bearish'] & in_fund['sehat'], out_keputusan['jangka_pendek'])
     r5 = ctrl.Rule(in_return['stagnan'] & in_fund['biasa'], out_keputusan['jangka_pendek'])
     r6 = ctrl.Rule(in_return['stagnan'] & in_fund['sehat'], out_keputusan['jangka_pendek'])
     r7 = ctrl.Rule(in_return['bullish'] & in_fund['biasa'], out_keputusan['jangka_pendek'])
+    
     r8 = ctrl.Rule(in_return['bullish'] & in_fund['sehat'] & in_sentimen['positif'], out_keputusan['jangka_panjang'])
     r9 = ctrl.Rule(in_return['bullish'] & in_fund['sehat'] & in_sentimen['netral'], out_keputusan['jangka_panjang'])
     
@@ -201,9 +204,10 @@ def generate_watchlist():
             
             data = KAGGLE_PILAR_DATA.get(ticker_name)
             if data:
-                avg_score = data["sentiment_score"]
-                sentiment_label = "Positive" if avg_score > 0 else "Negative" if avg_score < 0 else "Neutral"
                 fund_dict["Composite_Rank"] = data["piotroski_fuzzy"]
+                # avg_score = data["sentiment_score"]
+                # sentiment_label = "Positive" if avg_score > 0 else "Negative" if avg_score < 0 else "Neutral"
+                # fund_dict["Composite_Rank"] = data["piotroski_fuzzy"]
             
             fundamental_score = fund_dict.get("Composite_Rank", 0)
             fund_label = "Kuat / Good" if fundamental_score >= 0 else "Lemah / Weak"

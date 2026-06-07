@@ -4,6 +4,7 @@ import yfinance as yf
 import feedparser
 from urllib.parse import quote
 from datetime import datetime
+import time
 from functools import lru_cache
 from config import NEWS_KEYWORDS, MARKET_NEWS_CATEGORIES
 
@@ -102,18 +103,24 @@ def fetch_gold_data(period="2y"):
 
 @st.cache_data(ttl=900)
 def fetch_news(ticker):
+    feedparser.USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     news_items = []
 
     for keyword in NEWS_KEYWORDS.get(ticker, []):
+        time.sleep(1)
         query = quote(keyword)
         url = f"https://news.google.com/rss/search?q={query}&hl=id&gl=ID&ceid=ID:id"
         feed = feedparser.parse(url)
 
         for entry in feed.entries[:15]:
+            judul_kotor = entry.title if "title" in entry else ""
+            # Buang nama portal di akhir judul (e.g. " - Kompas.com")
+            judul_bersih_portal = judul_kotor.rsplit(" - ", 1)[0] if " - " in judul_kotor else judul_kotor
+
             news_items.append({
                 "Ticker": ticker,
                 "Keyword": keyword,
-                "Title": entry.title if "title" in entry else "",
+                "Title": judul_bersih_portal,
                 "Published": entry.published if "published" in entry else None,
                 "Source": entry.source.title if "source" in entry else "Google News",
                 "Link": entry.link if "link" in entry else ""
@@ -122,13 +129,13 @@ def fetch_news(ticker):
     news_df = pd.DataFrame(news_items)
 
     if news_df.empty:
-        return pd.DataFrame(columns=["Date", "Ticker", "Title", "Source", "Link"])
+        return pd.DataFrame(columns=["Date", "Tanggal", "Ticker", "Title", "Source", "Link"])
 
     news_df["Published"] = pd.to_datetime(news_df["Published"], errors="coerce")
-    news_df["Date"] = news_df["Published"].dt.date
-    news_df["Date"] = pd.to_datetime(news_df["Date"], errors="coerce")
+    news_df["Date"] = news_df["Published"].dt.normalize()   # datetime (untuk display)
+    news_df["Tanggal"] = news_df["Published"].dt.date       # date object (untuk groupby agregasi harian)
     news_df = news_df.dropna(subset=["Title"]).drop_duplicates(subset=["Title"])
-    news_df = news_df[["Date", "Ticker", "Title", "Source", "Link"]]
+    news_df = news_df[["Date", "Tanggal", "Ticker", "Title", "Source", "Link"]]
     news_df = news_df.sort_values("Date", ascending=False).reset_index(drop=True)
 
     return news_df
@@ -151,10 +158,12 @@ def fetch_market_news(category="Semua Berita"):
         
         limit_per_kw = 5 if category == "Semua Berita" else 15 
         for entry in feed.entries[:limit_per_kw]:
+            judul_kotor = entry.title if "title" in entry else ""
+            judul_bersih = judul_kotor.rsplit(" - ", 1)[0] if " - " in judul_kotor else judul_kotor
             news_items.append({
                 "Keyword": keyword,
                 "Category": category if category != "Semua Berita" else next((k for k, v in MARKET_NEWS_CATEGORIES.items() if keyword in v), "Umum"),
-                "Title": entry.title if "title" in entry else "",
+                "Title": judul_bersih,
                 "Published": entry.published if "published" in entry else None,
                 "Source": entry.source.title if "source" in entry else "Google News",
                 "Link": entry.link if "link" in entry else ""
