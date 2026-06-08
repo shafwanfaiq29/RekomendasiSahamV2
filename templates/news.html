@@ -21,10 +21,12 @@
     </div>
 
     <!-- Category Filter -->
-    <div class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-        {% set categories = ["Semua Berita", "Emas Global", "ANTM", "MDKA", "BRMS", "PSAB"] %}
+    <div class="flex flex-wrap gap-2 pb-4">
+        {% set categories = ["Semua Berita", "Emas", "Saham & IHSG", "Ekonomi Global", "Komoditas", "Tren Pasar", "ANTM", "MDKA", "BRMS", "PSAB", "ARCI", "UNTR", "AMMN", "HRTA"] %}
         {% for cat in categories %}
-        <a href="/news?category={{ cat }}" class="px-5 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-colors {% if category == cat %}bg-[#d4af37] text-[#5c470a] shadow-sm{% else %}bg-surface border border-border-color text-text-muted hover:bg-gray-50{% endif %}">
+        <a href="/news?category={{ cat | urlencode }}" 
+        class="px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all 
+        {% if category == cat %}bg-[#d4af37] text-[#5c470a] shadow-sm{% else %}bg-surface border border-border-color text-text-muted hover:border-[#d4af37]{% endif %}">
             {{ cat }}
         </a>
         {% endfor %}
@@ -45,6 +47,13 @@
                     <div class="flex flex-col gap-2 flex-1">
                         <div class="flex items-center gap-2">
                             <span class="bg-[#f3f4f6] text-text-muted px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">{{ row['Category']|default('Berita') }}</span>
+                            
+                            {% set label = row['Sentiment_Label'] %}
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider 
+                                {% if label == 'Positive' %}bg-green-100 text-green-700{% elif label == 'Negative' %}bg-red-100 text-red-700{% else %}bg-gray-100 text-gray-700{% endif %}">
+                                {{ label if label else 'Neutral' }}
+                            </span>
+                            
                             <span class="text-xs font-semibold text-text-muted">{{ row['Source'] }}</span>
                         </div>
                         <h3 class="text-lg font-bold text-text-main group-hover:text-[#b38d2e] transition-colors leading-snug">{{ row['Title'] }}</h3>
