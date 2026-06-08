@@ -2,7 +2,7 @@ import re
 import numpy as np
 from collections import Counter
 from transformers import pipeline
-from config import POSITIVE_WORDS, NEGATIVE_WORDS, MARKET_POSITIVE_WORDS, MARKET_NEGATIVE_WORDS, STOPWORDS_ID
+from config import POSITIVE_WORDS, NEGATIVE_WORDS, MARKET_POSITIVE_WORDS, MARKET_NEGATIVE_WORDS, STOPWORDS_ID, POS_MINING, NEG_MINING, NEUTRAL_AMBIGUOUS
 
 def load_indobert():
     print("[*] Memuat Model IndoBERT ke RAM...")
@@ -15,6 +15,15 @@ def load_indobert():
     )
 
 def bersihkan_teks(teks):
+    """
+    Preprocessing persis 100% kayak di pemodelan_nlp.ipynb.
+    
+    PENTING:
+    - Lowercase dulu SEBELUM regex lainnya (IndoBERT sensitif kapital)
+    - Pakai [^\w\s] bukan [^a-z\s] → angka tetap dipertahankan
+      (angka penting buat konteks saham, e.g. "naik 20%")
+    - Urutan operasi harus identik dengan notebook
+    """
     teks = str(teks).lower()
     teks = re.sub(r'http\S+|www\S+|https\S+', '', teks, flags=re.MULTILINE)
     teks = re.sub(r'\@\w+|\#\w+', '', teks)
@@ -24,6 +33,9 @@ def bersihkan_teks(teks):
     return teks
 
 def apply_sentiment(news_df):
+    """
+    Eksekusi NLP + Hybrid Lexicon + Agregasi Normalisasi Absolut buat Saham Individual
+    """
     if news_df.empty:
         return news_df, 0.0, "Neutral", 0
 
@@ -55,15 +67,30 @@ def apply_sentiment(news_df):
         prob_neg = probs.get('negative', 0.0)
         
         teks_lower = str(judul).lower()
-        ada_positif = any(kata in teks_lower for kata in POSITIVE_WORDS)
-        ada_negatif = any(kata in teks_lower for kata in NEGATIVE_WORDS)
+        ada_positif = any(kata in teks_lower for kata in POS_MINING)
+        ada_negatif = any(kata in teks_lower for kata in NEG_MINING)
+        ada_netral  = any(kata in teks_lower for kata in NEUTRAL_AMBIGUOUS)
         
         if ada_negatif and not ada_positif:
-            prob_neg += (prob_neu * 0.7)
-            prob_neu *= 0.3
+            # Lexicon Agresif Negatif: Curi probabilitas dari Positif dan Netral
+            prob_neg += (prob_neu * 0.6 + prob_pos * 0.8)
+            prob_neu *= 0.4
+            prob_pos *= 0.2
         elif ada_positif and not ada_negatif:
-            prob_pos += (prob_neu * 0.7)
-            prob_neu *= 0.3
+            # Lexicon Agresif Positif: Curi probabilitas dari Negatif dan Netral
+            prob_pos += (prob_neu * 0.6 + prob_neg * 0.8)
+            prob_neu *= 0.4
+            prob_neg *= 0.2
+        elif ada_netral:
+            # Netralin/Redam probabilitas biar ga bias
+            prob_neu += (prob_pos * 0.4 + prob_neg * 0.4)
+            prob_pos *= 0.6
+            prob_neg *= 0.6
+        elif ada_positif and ada_negatif:
+            # Kalau ada kata "naik" dan "turun" barengan, netralkan suasananya
+            prob_neu += (prob_pos * 0.5 + prob_neg * 0.5)
+            prob_pos *= 0.5
+            prob_neg *= 0.5
             
         total_prob = prob_pos + prob_neu + prob_neg
         prob_pos /= total_prob
@@ -111,6 +138,9 @@ def apply_sentiment(news_df):
     return news_df, skor_final, label_final, len(news_df)
 
 def apply_market_sentiment(news_df):
+    """
+    Eksekusi NLP + Hybrid Lexicon + Agregasi Normalisasi Absolut buat Market News Global
+    """
     if news_df.empty:
         return news_df, 0.0, "Neutral Market"
 
@@ -146,11 +176,20 @@ def apply_market_sentiment(news_df):
         ada_negatif = any(kata in teks_lower for kata in MARKET_NEGATIVE_WORDS)
         
         if ada_negatif and not ada_positif:
-            prob_neg += (prob_neu * 0.7)
-            prob_neu *= 0.3
+            # Lexicon Agresif Negatif: Curi probabilitas dari Positif dan Netral
+            prob_neg += (prob_neu * 0.6 + prob_pos * 0.8)
+            prob_neu *= 0.4
+            prob_pos *= 0.2
         elif ada_positif and not ada_negatif:
-            prob_pos += (prob_neu * 0.7)
-            prob_neu *= 0.3
+            # Lexicon Agresif Positif: Curi probabilitas dari Negatif dan Netral
+            prob_pos += (prob_neu * 0.6 + prob_neg * 0.8)
+            prob_neu *= 0.4
+            prob_neg *= 0.2
+        elif ada_positif and ada_negatif:
+            # Kalau ada kata "naik" dan "turun" barengan, netralkan suasananya
+            prob_neu += (prob_pos * 0.5 + prob_neg * 0.5)
+            prob_pos *= 0.5
+            prob_neg *= 0.5
             
         total_prob = prob_pos + prob_neu + prob_neg
         prob_pos /= total_prob

@@ -1,4 +1,4 @@
-# GoldStock Insight 🟡 Premium V2
+# GoldStock Insight - Premium V2
 
 **Sistem Rekomendasi Saham Sektor Emas Berbasis Hybrid AI (GRU + XGBoost), Sentimen Berita, dan Fundamental**
 
@@ -53,7 +53,7 @@ Seluruh metrik dari 3 pilar kemudian digabungkan melalui **Fuzzy Logic (Mamdani)
 
 5. **Jalankan Aplikasi Streamlit:**
    ```bash
-   streamlit run app.py
+   python app.py
    ```
 
 6. Buka browser dan akses URL lokal yang tertera (biasanya `http://localhost:8501`).

@@ -116,7 +116,11 @@
                 <div class="flex items-center justify-between mb-2">
                     <div>
                         <h4 class="text-[10px] font-bold text-text-muted uppercase tracking-widest mb-1">Fundamental Index</h4>
-                        <span class="text-xl font-bold text-text-main">{{ "%.1f"|format(fundamental_score|float) if fundamental_score else '7.4' }} / 10</span>
+                        {% if fundamental_score is not none %}
+                        <span class="text-xl font-bold text-text-main">{{ "%.2f"|format(fundamental_score|float) }} / 1.0</span>
+                        {% else %}
+                        <span class="text-xl font-bold text-text-muted">N/A</span>
+                        {% endif %}
                     </div>
                     <div class="w-10 h-10 rounded-full bg-gray-100 text-text-muted flex items-center justify-center">
                         <span class="material-symbols-outlined">account_balance</span>
@@ -137,7 +141,7 @@
             <div class="flex items-end gap-4 h-48 pl-2 pb-4">
                 {% set ml_h = (80 if (predicted_return|float) > 0 else 30) %}
                 {% set sent_h = 60 %}
-                {% set fund_h = (fundamental_score|float * 10) if fundamental_score else 74 %}
+                {% set fund_h = (fundamental_score|float * 100) if fundamental_score is not none else 0 %}
                 
                 <div class="flex flex-col items-center gap-2 justify-end h-full w-20">
                     <div class="w-12 bg-[#856514] rounded-t-sm" style="height: {{ ml_h }}%;"></div>

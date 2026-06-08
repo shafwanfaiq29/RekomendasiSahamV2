@@ -33,8 +33,12 @@
                 
                 <div class="mt-6 md:mt-0 md:w-64">
                     <div class="flex justify-between py-2 border-b border-border-color">
-                        <span class="text-sm text-text-muted">P/E Ratio</span>
-                        <span class="text-sm font-medium">{{ "%.1f"|format(top_pick['PE Ratio']|default(15.2)) }}x</span>
+                        <span class="text-sm text-text-muted">Rel. P/E vs Pasar</span>
+                        {% if top_pick['PE Ratio'] is not none and top_pick['PE Ratio'] %}
+                        <span class="text-sm font-medium">{{ "%.2f"|format(top_pick['PE Ratio']) }}x benchmark</span>
+                        {% else %}
+                        <span class="text-sm font-medium text-text-muted">N/A</span>
+                        {% endif %}
                     </div>
                     <div class="flex justify-between py-2 border-b border-border-color">
                         <span class="text-sm text-text-muted">Target Price</span>
@@ -117,10 +121,11 @@
                     <!-- Background Arc -->
                     <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#f3f4f6" stroke-linecap="round" stroke-width="12"></path>
                     <!-- Value Arc (Primary Gold) -->
-                    {% set score = (market_avg_score * 100) if market_avg_score else 50 %}
+                    {# market_avg_score range -1/+1 → petakan ke 0-100 untuk gauge arc #}
+                    {% set score = ((market_avg_score + 1) / 2 * 100) if market_avg_score is not none else 50 %}
                     <!-- Math logic for arc dashoffset -->
                     {% set dashoffset = 251 - (score / 100 * 251) %}
-                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#d4af37" stroke-linecap="round" stroke-width="12" style="stroke-dasharray: 251; stroke-dashoffset: {{ dashoffset }};"></path>
+                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#d4af37" stroke-linecap="round" stroke-width="12" style="stroke-dasharray: 251; stroke-dashoffset: {{ dashoffset }}px;"></path>
                 </svg>
                 
                 <div class="absolute bottom-0 left-0 right-0 flex flex-col items-center">
