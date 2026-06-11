@@ -1,9 +1,16 @@
 import os
+import requests
+import json
 import joblib
 import numpy as np
 import pandas as pd
 from functools import lru_cache
 from config import TICKER_MAP, SCALER_FEATURES, GRU_LOOKBACK
+
+# ==============================================================================
+# BASE_DIR: path absolut ke root proyek agar berjalan di Linux/Docker maupun Windows
+# ==============================================================================
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 class DummyST:
     def cache_resource(self, *args, **kwargs):
@@ -12,6 +19,13 @@ class DummyST:
         return lru_cache(maxsize=32)
 
 st = DummyST()
+
+# ==============================================================================
+# KONFIGURASI API — diambil dari environment variable, TIDAK hardcoded
+# ==============================================================================
+MODEL_API_URL = os.getenv("MODEL_API_URL", "")
+HF_API_KEY    = os.getenv("HF_API_KEY", "")
+
 
 @st.cache_data(ttl=60)
 def ambil_data_asli_kaggle():
@@ -51,7 +65,7 @@ def ambil_data_asli_kaggle():
             data_dinamis[ticker]["piotroski_fuzzy"] = fund.get("Skor_Piotroski_Fuzzy", 0.0)
 
         # Data sentimen NLP jika tersedia
-        file_nlp = f"data/sentimen_{ticker}.csv"
+        file_nlp = os.path.join(BASE_DIR, "data", f"sentimen_{ticker}.csv")
         if os.path.exists(file_nlp):
             df_nlp = pd.read_csv(file_nlp)
             if not df_nlp.empty:
@@ -67,10 +81,10 @@ KAGGLE_PILAR_DATA = ambil_data_asli_kaggle()
 
 @st.cache_resource(ttl=3600)
 def load_ml_models(ticker):
-    ticker_jk  = TICKER_MAP.get(ticker, ticker + ".JK")
-    gru_path   = f"models/gru_{ticker_jk}.h5"
-    xgb_path   = f"models/xgb_{ticker_jk}.json"
-    scaler_path = f"models/scaler_{ticker_jk}.pkl"
+    ticker_jk   = TICKER_MAP.get(ticker, ticker + ".JK")
+    gru_path    = os.path.join(BASE_DIR, "models", f"gru_{ticker_jk}.h5")
+    xgb_path    = os.path.join(BASE_DIR, "models", f"xgb_{ticker_jk}.json")
+    scaler_path = os.path.join(BASE_DIR, "models", f"scaler_{ticker_jk}.pkl")
 
     print(f"[DEBUG] Ticker: {ticker} | GRU: {gru_path} | XGB: {xgb_path}")
 
@@ -138,10 +152,76 @@ def build_gru_window(stock_df, gold_df, scaler, ticker):
         raise
 
 
+def predict_via_api(ticker, latest_row, stock_df, gold_df):
+    """
+    Kirim data ke Hugging Face Inference API (GPU endpoint) via HTTP POST.
+    Gunakan MODEL_API_URL dan HF_API_KEY dari environment variable.
+
+    Payload dikirim sebagai JSON; response diharapkan berisi {"predicted_return": float}.
+    Jika API tidak tersedia atau gagal, kembalikan None agar fallback ke rule-based.
+    """
+    if not MODEL_API_URL or not HF_API_KEY:
+        return None
+
+    try:
+        # Serialize latest_row (Series/dict) ke dict primitif
+        if hasattr(latest_row, 'to_dict'):
+            row_dict = latest_row.to_dict()
+        else:
+            row_dict = dict(latest_row)
+
+        # Pastikan semua nilai JSON-serializable (convert numpy → python native)
+        row_clean = {}
+        for k, v in row_dict.items():
+            try:
+                row_clean[str(k)] = float(v) if not isinstance(v, str) else v
+            except (TypeError, ValueError):
+                row_clean[str(k)] = 0.0
+
+        payload = {
+            "ticker": ticker,
+            "latest_row": row_clean,
+        }
+
+        headers = {
+            "Authorization": f"Bearer {HF_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        response = requests.post(
+            MODEL_API_URL,
+            headers=headers,
+            data=json.dumps(payload),
+            timeout=30,
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            pred = float(result.get("predicted_return", 0.0))
+            print(f"[API] Prediksi dari HuggingFace API untuk {ticker}: {pred:.4f}")
+            return pred
+        else:
+            print(f"[WARN] HuggingFace API error {response.status_code}: {response.text[:200]}")
+            return None
+
+    except requests.exceptions.Timeout:
+        print(f"[WARN] HuggingFace API timeout untuk {ticker}. Fallback ke lokal.")
+        return None
+    except Exception as e:
+        print(f"[WARN] HuggingFace API gagal untuk {ticker}: {e}. Fallback ke lokal.")
+        return None
+
+
 def predict_return(ticker, latest_row, stock_df=None, gold_df=None):
-    models  = load_ml_models(ticker)
-    gru_model = models.get("gru")   if models else None
-    xgb_model = models.get("xgb")   if models else None
+    # ── Coba via API GPU (Hugging Face) terlebih dahulu ──
+    api_pred = predict_via_api(ticker, latest_row, stock_df, gold_df)
+    if api_pred is not None:
+        return api_pred, "Machine Learning (GRU+XGBoost via API)"
+
+    # ── Fallback: muat model lokal jika MODEL_API_URL tidak dikonfigurasi ──
+    models    = load_ml_models(ticker)
+    gru_model = models.get("gru")    if models else None
+    xgb_model = models.get("xgb")    if models else None
     scaler    = models.get("scaler") if models else None
 
     if gru_model and scaler and stock_df is not None and gold_df is not None:
@@ -160,7 +240,7 @@ def predict_return(ticker, latest_row, stock_df=None, gold_df=None):
                         f"got {gru_features.shape[1]}"
                     )
                 pred = float(xgb_model.predict(gru_features)[0])
-                return pred, "Machine Learning (GRU+XGBoost)"
+                return pred, "Machine Learning (GRU+XGBoost Lokal)"
 
     print("[WARN] ML tidak tersedia — pakai Rule-Based fallback.")
     return fallback_predict_return(latest_row), "Rule-Based Evaluation"

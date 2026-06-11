@@ -1,4 +1,5 @@
 import json
+import os
 from flask import Flask, render_template, request
 from config import TICKER_MAP, COMPANY_NAMES
 from utils.data_fetcher import (
@@ -286,5 +287,12 @@ def compare():
     return render_template('compare.html', watchlist=watchlist_df)
 
 
+# ==============================================================================
+# ENTRY POINT
+# Development: python app.py
+# Production:  gunicorn app:app --bind 0.0.0.0:8000 --workers 2
+# ==============================================================================
 if __name__ == '__main__':
-    app.run(debug=True, use_reloader=False, port=5000)
+    debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    port       = int(os.getenv("PORT", 5000))
+    app.run(debug=debug_mode, use_reloader=False, host="0.0.0.0", port=port)

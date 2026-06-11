@@ -17,8 +17,10 @@ st = DummyST()
 
 # ==============================================================================
 # KONSTANTA
+# BASE_DIR: path absolut ke root proyek, agar berjalan di Windows maupun Linux/Docker
 # ==============================================================================
-_EXCEL_PATH = "data/Fundamental Saham Emas 2026-06-07.xlsx"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_EXCEL_PATH = os.path.join(BASE_DIR, "data", "Fundamental Saham Emas 2026-06-07.xlsx")
 _TARGET_TICKERS = ["ANTM", "BRMS", "MDKA", "PSAB", "UNTR", "HRTA", "ARCI", "AMMN"]
 
 # Kolom yang WAJIB ada di dict fundamental yang dihasilkan get_fundamental_row().

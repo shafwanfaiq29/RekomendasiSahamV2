@@ -1,14 +1,43 @@
-flask
-pandas
-numpy
-yfinance
-plotly
-feedparser
-joblib
-scikit-learn
-scikit-fuzzy
-tensorflow
-xgboost
-h5py
-transformers
-torch
+# ============================================================
+# requirements.txt — RekomendasiSahamV2
+# ============================================================
+
+# ── Web Framework & Server ───────────────────────────────────
+flask>=2.3,<3.0
+gunicorn>=21.2.0          # WSGI server untuk production (gantikan flask dev server)
+
+# ── HTTP Client ───────────────────────────────────────────────
+requests>=2.31.0          # Untuk memanggil HuggingFace Inference API
+
+# ── Data & ML ─────────────────────────────────────────────────
+pandas>=2.0,<3.0
+numpy>=1.24,<2.0
+scikit-learn>=1.3,<2.0
+xgboost>=1.7,<3.0
+joblib>=1.3
+
+# ── Deep Learning ─────────────────────────────────────────────
+# tensorflow & h5py hanya dibutuhkan jika MODEL_API_URL TIDAK diset
+# (fallback ke model lokal). Jika fully cloud, bisa di-comment untuk
+# memperkecil image size secara signifikan (~1.5 GB → ~200 MB).
+tensorflow>=2.12,<2.16
+h5py>=3.9
+
+# ── NLP (HuggingFace) ─────────────────────────────────────────
+# transformers & torch hanya dibutuhkan jika model dijalankan lokal.
+# Untuk mode API-only, kedua library ini TIDAK perlu di-install di server.
+# transformers>=4.30
+# torch>=2.0
+
+# ── Fuzzy Logic ───────────────────────────────────────────────
+scikit-fuzzy>=0.4.2
+
+# ── Finance Data ──────────────────────────────────────────────
+yfinance>=0.2.36
+feedparser>=6.0.10
+
+# ── Visualization ─────────────────────────────────────────────
+plotly>=5.17
+
+# ── Spreadsheet / Excel ───────────────────────────────────────
+openpyxl>=3.1.2           # Diperlukan pandas untuk read_excel()
