@@ -1,4 +1,4 @@
-# GoldStock Insight - Premium V2
+# GoldStock Insight
 
 **Sistem Rekomendasi Saham Sektor Emas Berbasis Hybrid AI (GRU + XGBoost), Sentimen Berita, dan Fundamental**
 
