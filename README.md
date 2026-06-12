@@ -76,3 +76,8 @@ coba bangun/
 ## Disclaimer
 
 Aplikasi ini dibangun untuk keperluan edukasi dan *Capstone Project*. Semua rekomendasi, prediksi, simulasi return, dan skor yang dihasilkan **bukanlah nasihat keuangan (financial advice)**. Segala keputusan investasi sepenuhnya merupakan tanggung jawab pengguna.
+
+## Repository Sebelumnya
+
+Proyek ini merupakan pengembangan lanjutan dari repository sebelumnya yang dapat diakses melalui tautan berikut:=
+[Rekomendasi-Saham](https://github.com/shafwanfaiq29/Rekomendasi-Saham.git)
